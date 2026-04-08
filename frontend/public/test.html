@@ -1,0 +1,39 @@
+<!-- frontend/public/test.html - Updated without @serenity-kit/opaque -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Crypto OPAQUE Test</title>
+</head>
+<body>
+    <h1>Web Crypto OPAQUE Test</h1>
+    <div id="output"></div>
+    <button onclick="runTest()">Run Test</button>
+
+    <script type="module">
+        // Import from our Web Crypto implementation
+        import { startRegistration } from '../src/utils/opaque-webcrypto.js';
+
+        window.runTest = async function() {
+            const output = document.getElementById('output');
+            output.innerHTML = 'Testing Web Crypto OPAQUE...<br>';
+            
+            try {
+                output.innerHTML += 'Starting registration...<br>';
+                const startResult = await startRegistration({ 
+                    password: 'testpassword123' 
+                });
+                
+                output.innerHTML += '✅ startRegistration successful<br>';
+                output.innerHTML += `clientRegistrationState: ${typeof startResult.clientRegistrationState}<br>`;
+                output.innerHTML += `registrationRequest: ${typeof startResult.registrationRequest}<br>`;
+                
+                console.log('Start result:', startResult);
+                
+            } catch (error) {
+                output.innerHTML += `❌ Error: ${error.message}<br>`;
+                console.error(error);
+            }
+        };
+    </script>
+</body>
+</html>
