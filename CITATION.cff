@@ -1,9 +1,7 @@
 cff-version: 1.1.0
 message: "If you use this software, please cite it as below."
-authors:
-- family-names: Joe
-  given-names: Johnson
-orcid: https://orcid.org/0000-0000-0000-0000
+authors: Vladimir Illich Arunan V V
+zenodo doi: https://doi.org/10.5281/zenodo.19467809
 title:ScriptedLines404/SecureCloud: SecureCloud_v1 - Zero-Knowledge File Encryptor for Cloud Storage with OPAQUE Protocol For Authentication (RFC 9380)
 version: SecureCloud_v1
 date-released: 2026-04-08
