@@ -1,7 +1,9 @@
 cff-version: 1.1.0
 message: "If you use this software, please cite it as below."
-authors: Vladimir Illich Arunan V V
-zenodo doi: https://doi.org/10.5281/zenodo.19467809
+author: Vladimir Illich Arunan V V
 title:ScriptedLines404/SecureCloud: SecureCloud_v1 - Zero-Knowledge File Encryptor for Cloud Storage with OPAQUE Protocol For Authentication (RFC 9380)
 version: SecureCloud_v1
 date-released: 2026-04-08
+doi: "10.5281/zenodo.19467810"
+repository-code: "https://github.com/ScriptedLines404/SecureCloud"
+license: "GPL-3.0"
