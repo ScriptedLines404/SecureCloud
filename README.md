@@ -6,17 +6,6 @@
 
 Unlike traditional encrypted storage solutions, SecureCloud is designed for **seamless collaboration** without sacrificing security. Recipients do not need to install any software, create an account, or log into the application to view shared files. All encryption and decryption happen transparently in the browser using standard Web Crypto APIs.
 
-### 🔗 Flexible & Secure Sharing
-
-SecureCloud provides two distinct sharing modes to balance accessibility with security:
-
-| Sharing Mode | Access Mechanism | Requirements for Recipient |
-| :--- | :--- | :--- |
-| **Anyone with Link (Public Share)** | Encryption key embedded in the URL fragment (`#key=...`) | No account, no software, no email verification. Works like a Google Drive "anyone with link" share. |
-| **Specific Person (Email OTP Share)** | Email-based one-time password (OTP) verification; key derived from recipient's email address | No account or software required, but must enter a valid OTP received via email to access the file. |
-
-Both sharing methods ensure that **the cloud provider never sees the decryption key**. In the public link mode, the key lives only in the URL fragment (never sent to the server). In the email OTP mode, the key is derived on the fly from the verified email address.
-
 ## 🔐 Security Features
 
 - **OPAQUE Protocol (RFC 9380)** - Password-authenticated key exchange with zero-knowledge proofs
@@ -35,12 +24,16 @@ Both sharing methods ensure that **the cloud provider never sees the decryption 
 - **Metadata Separation** - File metadata stored separately from encrypted content
 - **Google Drive Integration** - Leverages Google Drive as secure encrypted storage backend
 
-## 🔗 Secure Sharing
+### 🔗 Flexible & Secure Sharing
 
-- **Public Shares** - Anyone with the link can access (includes encryption key in URL fragment)
-- **Private Shares** - Email verification required, key derived from recipient's email
-- **Expiring Links** - Configurable expiration dates for shares
-- **Access Tracking** - Monitor how many times a share has been accessed
+SecureCloud provides two distinct sharing modes to balance accessibility with security:
+
+| Sharing Mode | Access Mechanism | Requirements for Recipient |
+| :--- | :--- | :--- |
+| **Anyone with Link (Public Share)** | Encryption key embedded in the URL fragment (`#key=...`) | No account, no software, no email verification. Works like a Google Drive "anyone with link" share. |
+| **Specific Person (Email OTP Share)** | Email-based one-time password (OTP) verification; key derived from recipient's email address | No account or software required, but must enter a valid OTP received via email to access the file. |
+
+Both sharing methods ensure that **the cloud provider never sees the decryption key**. In the public link mode, the key lives only in the URL fragment (never sent to the server). In the email OTP mode, the key is derived on the fly from the verified email address.
 
 ## 📊 Performance Monitoring
 
