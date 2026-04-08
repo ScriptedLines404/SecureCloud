@@ -2,6 +2,7 @@
   "name": "secure-cloud-backend",
   "version": "1.0.0",
   "description": "Zero knowledge encrypted cloud storage backend - OPAQUE RFC 9380",
+  "license": "GPL-3.0",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
