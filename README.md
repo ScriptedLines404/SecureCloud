@@ -2,9 +2,20 @@
 
 ## 🚀 Overview
 
-SecureCloud acts as an intermediate layer between the user and the cloud storage provider, enabling users to encrypt their files before they ever reach the cloud provider. It is a zero-knowledge, end-to-end encrypted file encryptor that ensures your data remains protected even if the cloud storage provider is compromised.
+**SecureCloud v1.0.0** acts as an intermediate layer between the user and the cloud storage provider, enabling users to encrypt their files before they ever reach the cloud provider. It is a **zero-knowledge, end-to-end encrypted file encryptor** that ensures your data remains protected even if the cloud storage provider is compromised.
 
-The application provides two distinct sharing mechanisms: public link sharing (similar to Google Drive's "anyone with the link can view" functionality) and secure person-specific sharing (requiring email OTP verification). Both methods ensure that encryption keys never touch the server—keys are either embedded in the URL fragment (public shares) or derived from the recipient's verified email address (private shares).
+Unlike traditional encrypted storage solutions, SecureCloud is designed for **seamless collaboration** without sacrificing security. Recipients do not need to install any software, create an account, or log into the application to view shared files. All encryption and decryption happen transparently in the browser using standard Web Crypto APIs.
+
+### 🔗 Flexible & Secure Sharing
+
+SecureCloud provides two distinct sharing modes to balance accessibility with security:
+
+| Sharing Mode | Access Mechanism | Requirements for Recipient |
+| :--- | :--- | :--- |
+| **Anyone with Link (Public Share)** | Encryption key embedded in the URL fragment (`#key=...`) | No account, no software, no email verification. Works like a Google Drive "anyone with link" share. |
+| **Specific Person (Email OTP Share)** | Email-based one-time password (OTP) verification; key derived from recipient's email address | No account or software required, but must enter a valid OTP received via email to access the file. |
+
+Both sharing methods ensure that **the cloud provider never sees the decryption key**. In the public link mode, the key lives only in the URL fragment (never sent to the server). In the email OTP mode, the key is derived on the fly from the verified email address.
 
 ## 🔐 Security Features
 
