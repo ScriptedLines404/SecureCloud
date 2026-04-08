@@ -2,7 +2,9 @@
 
 ## 🚀 Overview
 
-SecureCloud acts as an **intermediate layer between the user and the cloud storage provider**, enabling users to encrypt their files **before** they ever reach the cloud provider. It is a **zero-knowledge, end-to-end encrypted file encryptor** that ensures your data remains protected even if the cloud storage provider is compromised.
+SecureCloud acts as an intermediate layer between the user and the cloud storage provider, enabling users to encrypt their files before they ever reach the cloud provider. It is a zero-knowledge, end-to-end encrypted file encryptor that ensures your data remains protected even if the cloud storage provider is compromised.
+
+The application provides two distinct sharing mechanisms: public link sharing (similar to Google Drive's "anyone with the link can view" functionality) and secure person-specific sharing (requiring email OTP verification). Both methods ensure that encryption keys never touch the server—keys are either embedded in the URL fragment (public shares) or derived from the recipient's verified email address (private shares).
 
 ## 🔐 Security Features
 
