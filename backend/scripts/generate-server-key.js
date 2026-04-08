@@ -1,10 +1,29 @@
-// backend/scripts/generate-server-key.js
+/**
+ * SecureCloud - Zero-Knowledge Encrypted Flie Encryptor for Cloud Storage
+ * Copyright (C) 2026 Vladimir Illich Arunan V V
+ * 
+ * This file is part of SecureCloud.
+ * 
+ * SecureCloud is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ * 
+ * SecureCloud is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+ * GNU General Public License for more details.
+ * 
+ * You should have received a copy of the GNU General Public License
+ * along with SecureCloud. If not, see <https://www.gnu.org/licenses/>.
+ */
+
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
 /**
- * Phase 3: Generate a stable OPAQUE server private key
+ * Generate a stable OPAQUE server private key
  * This key MUST be generated once and never changed
  * Store it in Supabase secrets or .env file
  */
@@ -59,7 +78,7 @@ function generateServerKey() {
     console.log('  • Store a backup in a secure password manager');
     console.log('  • If lost, all existing user accounts become inaccessible');
     console.log('  • This key must remain stable for the lifetime of the application');
-    console.log('\n✅ Phase 3 complete: Server key generated and stored\n');
+    console.log('\n✅ Server key generated and stored\n');
 }
 
 // Run if called directly
