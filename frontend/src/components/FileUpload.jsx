@@ -34,6 +34,7 @@ const FileUpload = ({ onUploadComplete }) => {
     const [progress, setProgress] = useState({});
     const [initializing, setInitializing] = useState(true);
     const [masterKeyReady, setMasterKeyReady] = useState(false);
+    const [batchTiming, setBatchTiming] = useState(null);
 
     // Check master key and Google Drive connection
     useEffect(() => {
@@ -67,7 +68,8 @@ const FileUpload = ({ onUploadComplete }) => {
                 id: generateFileId(),
                 status: 'pending',
                 progress: 0,
-                error: null
+                error: null,
+                timing: null
             }))
         ]);
     }, []);
@@ -127,11 +129,20 @@ const FileUpload = ({ onUploadComplete }) => {
         setUploading(true);
         let successCount = 0;
         let errorCount = 0;
+        
+        // Track overall upload batch timing
+        const batchStartTime = performance.now();
+        const batchFileSizes = [];
+        const fileTimings = [];
 
         for (const fileItem of files) {
             if (fileItem.status === 'complete' || fileItem.status === 'error') continue;
             
             const toastId = fileItem.id;
+            batchFileSizes.push(fileItem.file.size);
+            
+            // Track individual file upload timing
+            const fileStartTime = performance.now();
             
             try {
                 setFiles(prev => prev.map(f => 
@@ -142,19 +153,22 @@ const FileUpload = ({ onUploadComplete }) => {
                 
                 toast.loading(`Encrypting ${fileItem.file.name}...`, { id: toastId });
 
-                // Encrypt file using master key
+                const encryptStart = performance.now();
                 const encryptedData = await encryptFile(fileItem.file, fileItem.id);
+                const encryptDuration = performance.now() - encryptStart;
                 
                 setProgress(prev => ({ ...prev, [fileItem.id]: 60 }));
 
                 // Upload to Google Drive with encrypted filename
                 toast.loading(`Uploading to Google Drive...`, { id: toastId });
                 
+                const uploadStart = performance.now();
                 const driveFile = await uploadToGoogleDrive(
                     encryptedData,
                     fileItem.file.name,
                     'application/octet-stream'
                 );
+                const uploadDuration = performance.now() - uploadStart;
 
                 setProgress(prev => ({ ...prev, [fileItem.id]: 90 }));
 
@@ -173,12 +187,35 @@ const FileUpload = ({ onUploadComplete }) => {
                 
                 console.log('📝 Saving metadata:', metadata);
                 
+                const saveStart = performance.now();
                 const saveResult = await saveFileMetadata(metadata);
+                const saveDuration = performance.now() - saveStart;
+                
+                const fileTotalDuration = performance.now() - fileStartTime;
+                
+                const timing = {
+                    fileName: fileItem.file.name,
+                    fileSize: fileItem.file.size,
+                    encryptMs: encryptDuration,
+                    uploadMs: uploadDuration,
+                    saveMs: saveDuration,
+                    totalMs: fileTotalDuration,
+                    throughputMBps: (fileItem.file.size / (fileTotalDuration / 1000)) / (1024 * 1024)
+                };
+                fileTimings.push(timing);
+                
+                console.log(`\n📊 FILE TIMING: ${fileItem.file.name}`);
+                console.log(`   Size: ${(timing.fileSize / (1024 * 1024)).toFixed(2)} MB`);
+                console.log(`   Encrypt: ${timing.encryptMs.toFixed(2)} ms`);
+                console.log(`   Upload: ${timing.uploadMs.toFixed(2)} ms`);
+                console.log(`   Save: ${timing.saveMs.toFixed(2)} ms`);
+                console.log(`   Total: ${timing.totalMs.toFixed(2)} ms`);
+                console.log(`   Throughput: ${timing.throughputMBps.toFixed(2)} MB/s`);
                 
                 if (saveResult.success) {
                     setProgress(prev => ({ ...prev, [fileItem.id]: 100 }));
                     setFiles(prev => prev.map(f => 
-                        f.id === fileItem.id ? { ...f, status: 'complete' } : f
+                        f.id === fileItem.id ? { ...f, status: 'complete', timing } : f
                     ));
                     toast.success(`${fileItem.file.name} uploaded securely!`, { id: toastId });
                     successCount++;
@@ -197,15 +234,43 @@ const FileUpload = ({ onUploadComplete }) => {
             }
         }
 
+        const batchDuration = performance.now() - batchStartTime;
+        const totalBatchSize = batchFileSizes.reduce((sum, size) => sum + size, 0);
+        const batchThroughput = totalBatchSize / (batchDuration / 1000);
+        
+        setBatchTiming({
+            fileCount: successCount,
+            totalSizeMB: totalBatchSize / (1024 * 1024),
+            totalTimeMs: batchDuration,
+            throughputMBps: batchThroughput / (1024 * 1024),
+            fileTimings
+        });
+        
+        console.log(`\n📊 UPLOAD BATCH SUMMARY:`);
+        console.log(`   Files: ${successCount} success, ${errorCount} failed`);
+        console.log(`   Total size: ${(totalBatchSize / (1024 * 1024)).toFixed(2)} MB`);
+        console.log(`   Total time: ${batchDuration.toFixed(2)} ms`);
+        console.log(`   Overall throughput: ${(batchThroughput / (1024 * 1024)).toFixed(2)} MB/s`);
+        
+        // Show summary toast
+        if (successCount > 0) {
+            toast.success(
+                <div>
+                    <strong>{successCount} file(s) uploaded!</strong>
+                    <div className="text-xs mt-1">
+                        {totalBatchSize / (1024 * 1024) > 0 && `${(totalBatchSize / (1024 * 1024)).toFixed(2)} MB in ${(batchDuration / 1000).toFixed(1)}s`}
+                        <br />
+                        {(batchThroughput / (1024 * 1024)).toFixed(2)} MB/s avg
+                    </div>
+                </div>,
+                { duration: 5000 }
+            );
+        }
+
         setUploading(false);
         
-        if (successCount > 0) {
-            toast.success(`${successCount} file(s) uploaded securely!`);
-            if (onUploadComplete) {
-                setTimeout(() => onUploadComplete(), 500);
-            }
-        } else if (errorCount > 0) {
-            toast.error(`Failed to upload ${errorCount} file(s)`);
+        if (successCount > 0 && onUploadComplete) {
+            setTimeout(() => onUploadComplete(), 500);
         }
     };
 
@@ -303,8 +368,12 @@ const FileUpload = ({ onUploadComplete }) => {
                                             {fileItem.file.name}
                                         </p>
                                         <p className="text-sm text-gray-500">
-                                            {(fileItem.file.size / 1024).toFixed(1)} KB
-                                            {fileItem.status === 'complete' && ' • Uploaded securely'}
+                                            {(fileItem.file.size / (1024 * 1024)).toFixed(2)} MB
+                                            {fileItem.status === 'complete' && fileItem.timing && (
+                                                <span className="ml-2 text-green-600">
+                                                    • {(fileItem.timing.totalMs / 1000).toFixed(2)}s • {fileItem.timing.throughputMBps.toFixed(2)} MB/s
+                                                </span>
+                                            )}
                                             {fileItem.status === 'error' && ' • Failed'}
                                         </p>
                                     </div>

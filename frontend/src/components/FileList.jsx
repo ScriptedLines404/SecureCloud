@@ -186,72 +186,103 @@ const FileList = ({ refresh }) => {
     };
 
     const handleDownload = async (file) => {
-        if (!masterKeyReady) {
-            toast.error('Master key not available. Please log in again.');
-            return;
-        }
+    if (!masterKeyReady) {
+        toast.error('Master key not available. Please log in again.');
+        return;
+    }
 
-        try {
-            setDownloading(prev => ({ ...prev, [file.id]: true }));
-            
-            toast.loading('Downloading encrypted file...', { id: file.id });
-            
-            const encryptedData = await downloadFromGoogleDrive(file.id);
-            
-            toast.loading('Decrypting file...', { id: file.id });
-            
-            const fileIdForDecryption = file.fileId;
-            
-            if (!fileIdForDecryption) {
-                throw new Error('Cannot decrypt: No file ID found in metadata.');
-            }
-            
-            const decryptedData = await decryptFile(encryptedData, fileIdForDecryption);
-            
-            // Determine MIME type
-            let mimeType = 'application/octet-stream';
-            const ext = file.originalName.split('.').pop()?.toLowerCase();
-            
-            const mimeTypes = {
-                'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 
-                'gif': 'image/gif', 'bmp': 'image/bmp', 'webp': 'image/webp',
-                'svg': 'image/svg+xml', 'mp4': 'video/mp4', 'webm': 'video/webm',
-                'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska',
-                'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
-                'm4a': 'audio/mp4', 'flac': 'audio/flac', 'pdf': 'application/pdf',
-                'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                'txt': 'text/plain', 'rtf': 'application/rtf', 'xls': 'application/vnd.ms-excel',
-                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                'csv': 'text/csv', 'ppt': 'application/vnd.ms-powerpoint',
-                'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-                'zip': 'application/zip', 'rar': 'application/x-rar-compressed',
-                '7z': 'application/x-7z-compressed', 'tar': 'application/x-tar',
-                'gz': 'application/gzip'
-            };
-            
-            if (ext && mimeTypes[ext]) {
-                mimeType = mimeTypes[ext];
-            }
-            
-            const blob = new Blob([decryptedData], { type: mimeType });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = file.originalName;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            
-            toast.success(`Downloaded: ${file.originalName}`, { id: file.id });
-            
-        } catch (error) {
-            console.error('Download failed:', error);
-            toast.error(`Download failed: ${error.message}`, { id: file.id });
-        } finally {
-            setDownloading(prev => ({ ...prev, [file.id]: false }));
+    // Track download timing
+    const downloadStartTime = performance.now();
+    const fileName = file.originalName;
+    const fileSize = file.size;
+
+    try {
+        setDownloading(prev => ({ ...prev, [file.id]: true }));
+        
+        toast.loading('Downloading encrypted file...', { id: file.id });
+        
+        const downloadTimerStart = performance.now();
+        const encryptedData = await downloadFromGoogleDrive(file.id);
+        const downloadDuration = performance.now() - downloadTimerStart;
+        
+        console.log(`📥 Download completed in ${downloadDuration.toFixed(2)}ms, size: ${(encryptedData.byteLength / (1024 * 1024)).toFixed(2)} MB`);
+        
+        toast.loading('Decrypting file...', { id: file.id });
+        
+        const decryptTimerStart = performance.now();
+        const fileIdForDecryption = file.fileId;
+        
+        if (!fileIdForDecryption) {
+            throw new Error('Cannot decrypt: No file ID found in metadata.');
         }
-    };
+        
+        const decryptedData = await decryptFile(encryptedData, fileIdForDecryption);
+        const decryptDuration = performance.now() - decryptTimerStart;
+        
+        console.log(`🔓 Decryption completed in ${decryptDuration.toFixed(2)}ms`);
+        
+        // Determine MIME type
+        let mimeType = 'application/octet-stream';
+        const ext = file.originalName.split('.').pop()?.toLowerCase();
+        
+        const mimeTypes = {
+            'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 
+            'gif': 'image/gif', 'bmp': 'image/bmp', 'webp': 'image/webp',
+            'svg': 'image/svg+xml', 'mp4': 'video/mp4', 'webm': 'video/webm',
+            'avi': 'video/x-msvideo', 'mov': 'video/quicktime', 'mkv': 'video/x-matroska',
+            'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'ogg': 'audio/ogg',
+            'm4a': 'audio/mp4', 'flac': 'audio/flac', 'pdf': 'application/pdf',
+            'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'txt': 'text/plain', 'rtf': 'application/rtf', 'xls': 'application/vnd.ms-excel',
+            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'csv': 'text/csv', 'ppt': 'application/vnd.ms-powerpoint',
+            'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'zip': 'application/zip', 'rar': 'application/x-rar-compressed',
+            '7z': 'application/x-7z-compressed', 'tar': 'application/x-tar',
+            'gz': 'application/gzip'
+        };
+        
+        if (ext && mimeTypes[ext]) {
+            mimeType = mimeTypes[ext];
+        }
+        
+        const blob = new Blob([decryptedData], { type: mimeType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = file.originalName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        const totalDuration = performance.now() - downloadStartTime;
+        const throughput = fileSize / (totalDuration / 1000);
+        
+        console.log(`\n📊 DOWNLOAD SUMMARY for ${fileName}:`);
+        console.log(`   File size: ${(fileSize / (1024 * 1024)).toFixed(2)} MB`);
+        console.log(`   Download: ${downloadDuration.toFixed(2)} ms (${((fileSize / (1024 * 1024)) / (downloadDuration / 1000)).toFixed(2)} MB/s)`);
+        console.log(`   Decrypt: ${decryptDuration.toFixed(2)} ms (${((fileSize / (1024 * 1024)) / (decryptDuration / 1000)).toFixed(2)} MB/s)`);
+        console.log(`   Total: ${totalDuration.toFixed(2)} ms (${(throughput / (1024 * 1024)).toFixed(2)} MB/s)`);
+        
+        toast.success(
+            <div>
+                <strong>Downloaded: {fileName}</strong>
+                <div className="text-xs mt-1">
+                    {(totalDuration / 1000).toFixed(1)}s • {(throughput / (1024 * 1024)).toFixed(2)} MB/s
+                </div>
+            </div>,
+            { id: file.id, duration: 4000 }
+        );
+        
+    } catch (error) {
+        const totalDuration = performance.now() - downloadStartTime;
+        console.error(`Download failed after ${totalDuration.toFixed(2)}ms:`, error);
+        toast.error(`Download failed: ${error.message}`, { id: file.id });
+    } finally {
+        setDownloading(prev => ({ ...prev, [file.id]: false }));
+    }
+};
 
     const handleDelete = async (file) => {
         if (!confirm(`Delete "${file.originalName}"? This will also delete all shares.`)) return;

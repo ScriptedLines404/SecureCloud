@@ -22,6 +22,14 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 import './index.css';
+import { perfMetrics } from './utils/performanceMetrics';
+
+// Make perfMetrics available globally for other modules
+window.perfMetrics = perfMetrics;
+
+// Log performance monitoring status
+console.log('📊 Performance metrics monitoring enabled');
+console.log(`   Session ID: ${perfMetrics.sessionId}`);
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

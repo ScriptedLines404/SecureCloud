@@ -39,12 +39,13 @@ import { getMasterKeyFromMemory } from '../services/keyManagementService';
 import { perfMetrics } from './performanceMetrics';
 
 /**
- * Encrypt a file using the Master Key
+ * Encrypt a file using the Master Key with timing measurement
  */
 export async function encryptFile(file, fileId) {
-    console.log(`🔐 Encrypting file: ${file.name} (${file.size} bytes)`);
+    console.log(`🔐 Encrypting file: ${file.name} (${(file.size / (1024 * 1024)).toFixed(2)} MB)`);
     
     const startTime = performance.now();
+    const fileSize = file.size;
     
     try {
         // Get master key from memory
@@ -54,34 +55,52 @@ export async function encryptFile(file, fileId) {
         }
         
         // Derive file-specific key from master key
+        const deriveStart = performance.now();
         const fileKey = await deriveFileKey(masterKey, fileId);
+        const deriveDuration = performance.now() - deriveStart;
         
         // Read file as ArrayBuffer
         const fileBuffer = await file.arrayBuffer();
         
         // Encrypt the file
+        const encryptStart = performance.now();
         const encryptedData = await encryptWithAESGCM(fileKey, fileBuffer);
+        const encryptDuration = performance.now() - encryptStart;
         
-        const duration = performance.now() - startTime;
-        const throughput = file.size / (duration / 1000);
+        const totalDuration = performance.now() - startTime;
+        const throughput = fileSize / (totalDuration / 1000);
         
-        console.log(`✅ File encrypted successfully in ${duration.toFixed(2)}ms`);
+        console.log(`✅ File encrypted successfully in ${totalDuration.toFixed(2)}ms`);
+        console.log(`   - Key derivation: ${deriveDuration.toFixed(2)}ms`);
+        console.log(`   - Encryption: ${encryptDuration.toFixed(2)}ms`);
         console.log(`📊 Throughput: ${(throughput / (1024 * 1024)).toFixed(2)} MB/s`);
+        
+        // Track performance metrics
+        if (window.perfMetrics) {
+            window.perfMetrics.measureFileEncryption(fileSize, startTime, performance.now(), 'AES-GCM-256');
+        }
         
         return encryptedData;
     } catch (error) {
-        console.error('Encryption failed:', error);
+        const duration = performance.now() - startTime;
+        console.error(`Encryption failed after ${duration.toFixed(2)}ms:`, error);
+        
+        if (window.perfMetrics) {
+            window.perfMetrics.measureFileEncryption(fileSize, startTime, performance.now(), 'AES-GCM-256');
+            window.perfMetrics.trackError('fileEncryption', error.message);
+        }
         throw new Error(`Encryption failed: ${error.message}`);
     }
 }
 
 /**
- * Decrypt a file using the Master Key
+ * Decrypt a file using the Master Key with timing measurement
  */
 export async function decryptFile(encryptedData, fileId) {
-    console.log(`🔐 Decrypting file...`);
+    console.log(`🔐 Decrypting file... (${(encryptedData.byteLength / (1024 * 1024)).toFixed(2)} MB encrypted)`);
     
     const startTime = performance.now();
+    const fileSize = encryptedData.byteLength;
     
     try {
         // Get master key from memory
@@ -91,20 +110,37 @@ export async function decryptFile(encryptedData, fileId) {
         }
         
         // Derive file-specific key from master key
+        const deriveStart = performance.now();
         const fileKey = await deriveFileKey(masterKey, fileId);
+        const deriveDuration = performance.now() - deriveStart;
         
         // Decrypt the file
+        const decryptStart = performance.now();
         const decryptedBuffer = await decryptWithAESGCM(fileKey, encryptedData);
+        const decryptDuration = performance.now() - decryptStart;
         
-        const duration = performance.now() - startTime;
-        const throughput = decryptedBuffer.byteLength / (duration / 1000);
+        const totalDuration = performance.now() - startTime;
+        const throughput = decryptedBuffer.byteLength / (totalDuration / 1000);
         
-        console.log(`✅ File decrypted successfully in ${duration.toFixed(2)}ms`);
+        console.log(`✅ File decrypted successfully in ${totalDuration.toFixed(2)}ms`);
+        console.log(`   - Key derivation: ${deriveDuration.toFixed(2)}ms`);
+        console.log(`   - Decryption: ${decryptDuration.toFixed(2)}ms`);
         console.log(`📊 Throughput: ${(throughput / (1024 * 1024)).toFixed(2)} MB/s`);
+        
+        // Track performance metrics
+        if (window.perfMetrics) {
+            window.perfMetrics.measureFileDecryption(fileSize, startTime, performance.now(), 'AES-GCM-256');
+        }
         
         return decryptedBuffer;
     } catch (error) {
-        console.error('Decryption failed:', error);
+        const duration = performance.now() - startTime;
+        console.error(`Decryption failed after ${duration.toFixed(2)}ms:`, error);
+        
+        if (window.perfMetrics) {
+            window.perfMetrics.measureFileDecryption(fileSize, startTime, performance.now(), 'AES-GCM-256');
+            window.perfMetrics.trackError('fileDecryption', error.message);
+        }
         throw new Error(`Decryption failed: ${error.message}`);
     }
 }

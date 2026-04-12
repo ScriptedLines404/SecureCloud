@@ -326,16 +326,15 @@ export async function authenticateGoogleDrive() {
 }
 
 /**
- * Upload encrypted file to Google Drive
+ * Upload encrypted file to Google Drive with timing measurement
  */
 export async function uploadToGoogleDrive(encryptedFileData, originalFileName, mimeType = 'application/octet-stream') {
-    const timerId = perfMetrics.startTimer('google-drive-upload');
     const startTime = performance.now();
     const fileSize = encryptedFileData.byteLength;
     
+    console.log(`📤 Uploading encrypted file to Google Drive (${(fileSize / (1024 * 1024)).toFixed(2)} MB)`);
+    
     try {
-        console.log(`📤 Uploading encrypted file to Google Drive (${fileSize} bytes)`);
-
         const savedToken = getSavedToken();
         if (!savedToken) {
             await authenticateGoogleDrive();
@@ -388,11 +387,19 @@ export async function uploadToGoogleDrive(encryptedFileData, originalFileName, m
             console.log(`✅ File uploaded successfully in ${duration.toFixed(2)}ms`);
             console.log(`📊 Upload throughput: ${(throughput / (1024 * 1024)).toFixed(2)} MB/s`);
             
+            // Track performance metrics
+            if (window.perfMetrics) {
+                window.perfMetrics.measureGoogleDriveUpload(fileSize, duration, 'success', {
+                    fileName: originalFileName,
+                    throughput: throughput / (1024 * 1024)
+                });
+            }
+            
             return {
                 ...result,
                 encryptedFileName: encryptedFileName,
                 originalFileName: originalFileName,
-                performance: { duration, throughput }
+                performance: { duration, throughput, fileSize }
             };
         } else {
             if (response.status === 401) {
@@ -407,12 +414,19 @@ export async function uploadToGoogleDrive(encryptedFileData, originalFileName, m
     } catch (error) {
         const duration = performance.now() - startTime;
         console.error(`❌ Google Drive upload error after ${duration.toFixed(2)}ms:`, error);
+        
+        if (window.perfMetrics) {
+            window.perfMetrics.measureGoogleDriveUpload(fileSize, duration, 'error', {
+                error: error.message
+            });
+            window.perfMetrics.trackError('googleDriveUpload', error.message);
+        }
         throw error;
     }
 }
 
 /**
- * Download encrypted file from Google Drive
+ * Download encrypted file from Google Drive with timing measurement
  */
 export async function downloadFromGoogleDrive(fileId) {
     const startTime = performance.now();
@@ -451,10 +465,26 @@ export async function downloadFromGoogleDrive(fileId) {
         console.log(`✅ File downloaded successfully in ${duration.toFixed(2)}ms`);
         console.log(`📊 Download throughput: ${(throughput / (1024 * 1024)).toFixed(2)} MB/s`);
         
+        // Track performance metrics
+        if (window.perfMetrics) {
+            window.perfMetrics.measureGoogleDriveDownload(fileSize, duration, 'success', {
+                fileId,
+                throughput: throughput / (1024 * 1024)
+            });
+        }
+        
         return new Uint8Array(encryptedData);
     } catch (error) {
         const duration = performance.now() - startTime;
         console.error(`❌ Google Drive download error after ${duration.toFixed(2)}ms:`, error);
+        
+        if (window.perfMetrics) {
+            window.perfMetrics.measureGoogleDriveDownload(0, duration, 'error', {
+                fileId,
+                error: error.message
+            });
+            window.perfMetrics.trackError('googleDriveDownload', error.message);
+        }
         throw error;
     }
 }
