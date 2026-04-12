@@ -1,8 +1,8 @@
-# SecureCloud v1.0.0 - Zero-Knowledge File Encryptor for Cloud Storage
+# SecureCloud v1.0.1 - Zero-Knowledge File Encryptor for Cloud Storage
 
 ## 🚀 Overview
 
-**SecureCloud v1.0.0** acts as an intermediate layer between the user and the cloud storage provider, enabling users to encrypt their files before they ever reach the cloud provider. It is a **zero-knowledge, end-to-end encrypted file encryptor** that ensures your data remains protected even if the cloud storage provider is compromised.
+**SecureCloud v1.0.1** acts as an intermediate layer between the user and the cloud storage provider, enabling users to encrypt their files before they ever reach the cloud provider. It is a **zero-knowledge, end-to-end encrypted file encryptor** that ensures your data remains protected even if the cloud storage provider is compromised.
 
 Unlike traditional encrypted storage solutions, SecureCloud is designed for **seamless collaboration** without sacrificing security. Recipients do not need to install any software, create an account, or log into the application to view shared files. All encryption and decryption happen transparently in the browser using standard Web Crypto APIs.
 
