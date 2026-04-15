@@ -1,4 +1,4 @@
-# SecureCloud v1.0.1 - Zero-Knowledge File Encryptor for Cloud Storage
+# SecureCloud v1.0.1 - Zero-Knowledge Cloud Storage System with OPAQUE Authentication, Hierarchical Key Isolation, Secure Sharing, and Formalised Tri-Layer Trust Boundaries
 
 ## 🚀 Overview
 
