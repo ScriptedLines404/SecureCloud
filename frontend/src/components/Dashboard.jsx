@@ -1,5 +1,5 @@
 /**
- * SecureCloud - Zero-Knowledge Encrypted Flie Encryptor for Cloud Storage
+ * SecureCloud - Zero-Knowledge Encrypted File Encryptor for Cloud Storage
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  * 
  * This file is part of SecureCloud.
@@ -26,17 +26,20 @@ import {
   FaSync,
   FaUpload,
   FaKey,
-  FaChartLine  // Add this icon
+  FaChartLine,
+  FaDownload,
+  FaSpinner
 } from 'react-icons/fa';
 import FileUpload from './FileUpload';
 import FileList from './FileList';
 import MasterKeyModal from './MasterKeyModal';
-import PerformanceDashboard from './PerformanceDashboard'; // Add import
+import PerformanceDashboard from './PerformanceDashboard';
+import BatchDownloadModal from './BatchDownloadModal';
 import { logout as opaqueLogout } from '../utils/opaque';
 import { getMasterKeyFromMemory, clearMasterKeyFromMemory } from '../services/keyManagementService';
 import { isGoogleDriveConnected } from '../services/googleDrive';
 import { getUserStats } from '../services/metadataService';
-import { perfMetrics } from '../utils/performanceMetrics'; // Add import
+import { perfMetrics } from '../utils/performanceMetrics';
 import toast from 'react-hot-toast';
 
 const Dashboard = () => {
@@ -52,7 +55,8 @@ const Dashboard = () => {
   const [driveConnected, setDriveConnected] = useState(false);
   const [masterKey, setMasterKey] = useState(null);
   const [showMasterKeyModal, setShowMasterKeyModal] = useState(false);
-  const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false); // Add state
+  const [showPerformanceDashboard, setShowPerformanceDashboard] = useState(false);
+  const [showBatchDownload, setShowBatchDownload] = useState(false);
   const [inactivityTimer, setInactivityTimer] = useState(null);
 
   useEffect(() => {
@@ -254,19 +258,41 @@ const Dashboard = () => {
         <PerformanceDashboard onClose={() => setShowPerformanceDashboard(false)} />
       )}
 
+      {/* Batch Download Modal */}
+      {showBatchDownload && (
+        <BatchDownloadModal onClose={() => setShowBatchDownload(false)} />
+      )}
+
       {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+      <header className="bg-white border-b border-gray-200 sticky top-0 z-10 shadow-sm">
         <div className="max-w-4xl mx-auto px-4 py-4">
           <div className="flex justify-between items-center">
             <div>
-              <h1 className="text-xl font-bold text-gray-800">Secure Cloud Storage</h1>
-              <p className="text-sm text-gray-500 mt-1">Zero-Knowledge Architecture</p>
+              <h1 className="text-xl font-bold text-gray-800">SecureCloud</h1>
+              <p className="text-sm text-gray-500 mt-1">Zero-Knowledge Encrypted Storage</p>
             </div>
             <div className="flex items-center space-x-4">
+              {/* Batch Download Button */}
+              <button
+                onClick={() => {
+                  if (!masterKey) {
+                    toast.error('Please derive master key first');
+                    setShowMasterKeyModal(true);
+                    return;
+                  }
+                  setShowBatchDownload(true);
+                }}
+                className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
+                title="Download All Files"
+              >
+                <FaDownload className="mr-2 text-blue-600" />
+                Download All
+              </button>
+              
               {/* Performance Dashboard Button */}
               <button
                 onClick={() => setShowPerformanceDashboard(true)}
-                className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
                 title="Performance Metrics"
               >
                 <FaChartLine className="mr-2 text-green-600" />
@@ -281,7 +307,7 @@ const Dashboard = () => {
               </div>
               <button
                 onClick={handleLogout}
-                className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg"
+                className="flex items-center px-3 py-2 text-sm font-medium text-gray-700 hover:text-gray-900 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <FaSignOutAlt className="mr-2" />
                 Sign Out
@@ -337,8 +363,8 @@ const Dashboard = () => {
             <p className="text-gray-500">{stats.storageUsed} used • End-to-end encrypted</p>
           </div>
 
-          {/* Quick Actions - Now 4 buttons including Performance */}
-          <div className="grid grid-cols-4 gap-4 mb-8">
+          {/* Quick Actions */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
             <button
               onClick={() => {
                 if (!masterKey) {
@@ -390,6 +416,28 @@ const Dashboard = () => {
             >
               <FaChartLine className="text-2xl mb-2 text-purple-600" />
               <span className="text-sm font-medium text-gray-700">Performance</span>
+            </button>
+
+            {/* Batch Download Button */}
+            <button
+              onClick={() => {
+                if (!masterKey) {
+                  toast.error('Please derive master key first');
+                  setShowMasterKeyModal(true);
+                  return;
+                }
+                setShowBatchDownload(true);
+              }}
+              disabled={!masterKey}
+              className={`flex flex-col items-center justify-center p-4 border rounded-xl transition-colors ${
+                masterKey 
+                  ? 'border-gray-200 hover:bg-gray-50 hover:border-blue-300' 
+                  : 'border-gray-200 bg-gray-50 cursor-not-allowed opacity-50'
+              }`}
+              title={!masterKey ? 'Get master key first' : 'Download all files as ZIP'}
+            >
+              <FaDownload className={`text-2xl mb-2 ${masterKey ? 'text-blue-600' : 'text-gray-400'}`} />
+              <span className="text-sm font-medium text-gray-700">Download All</span>
             </button>
           </div>
 

@@ -1,5 +1,5 @@
 /**
- * SecureCloud - Zero-Knowledge Encrypted Flie Encryptor for Cloud Storage
+ * SecureCloud - Zero-Knowledge Encrypted File Encryptor for Cloud Storage
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  * 
  * This file is part of SecureCloud.
@@ -17,7 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with SecureCloud. If not, see <https://www.gnu.org/licenses/>.
  */
-
 
 class PerformanceMetrics {
     constructor() {
@@ -54,23 +53,29 @@ class PerformanceMetrics {
                 keyDerivation: []
             },
             
-            // Encryption metrics with your specific size categories
+            // Encryption metrics with separate upload/download tracking
             encryption: {
-                fileEncryption: [],
-                fileDecryption: [],
+                fileEncryption: [],      // Time to encrypt file
+                fileDecryption: [],      // Time to decrypt file
                 keyGeneration: [],
                 keyWrapping: [],
                 keyUnwrapping: [],
-                // Auto-generated categories for your test sizes
                 bySize: this.initializeSizeCategories()
             },
             
-            // Network metrics with your specific size categories
+            // Network metrics with separate upload/download tracking
             network: {
                 apiCalls: [],
-                googleDriveUpload: [],
-                googleDriveDownload: [],
+                googleDriveUpload: [],    // Time to upload to Google Drive
+                googleDriveDownload: [],  // Time to download from Google Drive
                 shareLinkGeneration: [],
+                bySize: this.initializeSizeCategories()
+            },
+            
+            // Transfer metrics (combined view)
+            transfer: {
+                totalUpload: [],          // Encryption + Upload combined
+                totalDownload: [],        // Download + Decryption combined
                 bySize: this.initializeSizeCategories()
             },
             
@@ -144,26 +149,19 @@ class PerformanceMetrics {
         }
     }
     
-    /**
-     * Categorize file size into your specific test size buckets
-     */
     categorizeFileSize(bytes) {
-        // Find the closest test size category
         for (const size of this.testSizes) {
-            // Allow some tolerance (±5%) for size matching
             const tolerance = size.bytes * 0.05;
             if (Math.abs(bytes - size.bytes) <= tolerance) {
                 return size.name;
             }
         }
         
-        // If not an exact test size, find the appropriate range
         for (let i = 0; i < this.testSizes.length; i++) {
             const current = this.testSizes[i];
             const next = this.testSizes[i + 1];
             
             if (!next) {
-                // Larger than largest test size
                 if (bytes > current.bytes) {
                     return `${current.name}+`;
                 }
@@ -175,12 +173,9 @@ class PerformanceMetrics {
         return 'unknown';
     }
     
-    /**
-     * Get exact test size name if it matches one of your test sizes
-     */
     getExactTestSize(bytes) {
         for (const size of this.testSizes) {
-            const tolerance = size.bytes * 0.05; // 5% tolerance
+            const tolerance = size.bytes * 0.05;
             if (Math.abs(bytes - size.bytes) <= tolerance) {
                 return size.name;
             }
@@ -188,9 +183,6 @@ class PerformanceMetrics {
         return null;
     }
     
-    /**
-     * Get human-readable size category name
-     */
     getSizeCategoryName(category) {
         if (this.sizeCategories[category]) {
             return this.sizeCategories[category].displayName;
@@ -198,9 +190,6 @@ class PerformanceMetrics {
         return category;
     }
     
-    /**
-     * Format file size for display
-     */
     formatFileSize(bytes) {
         if (bytes < 1024) return `${bytes} B`;
         if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(2)} KB`;
@@ -208,9 +197,6 @@ class PerformanceMetrics {
         return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
     }
     
-    /**
-     * Start timing an operation
-     */
     startTimer(operation) {
         const timerId = `${operation}-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`;
         if (performance && performance.mark) {
@@ -223,9 +209,6 @@ class PerformanceMetrics {
         return timerId;
     }
     
-    /**
-     * End timing and record metrics with automatic size categorization
-     */
     endTimer(timerId, category, subCategory, metadata = {}) {
         try {
             let duration = null;
@@ -256,14 +239,12 @@ class PerformanceMetrics {
                     ...metadata
                 };
                 
-                // Add file size information if present
                 if (metadata.fileSize) {
                     metric.formattedSize = this.formatFileSize(metadata.fileSize);
                     metric.sizeCategory = this.categorizeFileSize(metadata.fileSize);
                     metric.exactTestSize = this.getExactTestSize(metadata.fileSize);
                 }
                 
-                // Ensure category and subCategory exist
                 if (!this.metrics[category]) {
                     this.metrics[category] = {};
                 }
@@ -272,10 +253,8 @@ class PerformanceMetrics {
                     this.metrics[category][subCategory] = [];
                 }
                 
-                // Add to main category
                 this.metrics[category][subCategory].push(metric);
                 
-                // Auto-categorize by exact test size if it matches
                 if (metadata.fileSize && metric.exactTestSize && this.metrics[category].bySize) {
                     const sizeCat = metric.exactTestSize;
                     if (this.metrics[category].bySize[sizeCat]) {
@@ -285,12 +264,10 @@ class PerformanceMetrics {
                 
                 this.totalOps++;
                 
-                // Keep only last 200 measurements per category
                 if (this.metrics[category][subCategory].length > 200) {
                     this.metrics[category][subCategory] = this.metrics[category][subCategory].slice(-200);
                 }
                 
-                // Keep only last 100 measurements per size category
                 if (metadata.fileSize && metric.exactTestSize && this.metrics[category].bySize) {
                     const sizeCat = metric.exactTestSize;
                     if (this.metrics[category].bySize[sizeCat] && 
@@ -308,11 +285,11 @@ class PerformanceMetrics {
     }
     
     /**
-     * Measure file encryption with your specific size categorization
+     * Measure file encryption - tracks encryption time only
      */
     measureFileEncryption(fileSize, startTime, endTime, algorithm = 'AES-GCM-256') {
         const duration = endTime - startTime;
-        const throughput = fileSize / (duration / 1000); // bytes per second
+        const throughput = fileSize / (duration / 1000);
         const sizeCategory = this.categorizeFileSize(fileSize);
         const exactTestSize = this.getExactTestSize(fileSize);
         
@@ -323,20 +300,19 @@ class PerformanceMetrics {
             sizeCategory,
             exactTestSize,
             throughput,
+            throughputMBps: throughput / (1024 * 1024),
             algorithm,
+            operation: 'encrypt',
             timestamp: Date.now(),
             sessionId: this.sessionId
         };
         
-        // Add to main array
         this.metrics.encryption.fileEncryption.push(metric);
         
-        // Add to exact test size category if it matches
         if (exactTestSize && this.metrics.encryption.bySize[exactTestSize]) {
             this.metrics.encryption.bySize[exactTestSize].push(metric);
         }
         
-        // Keep limits
         if (this.metrics.encryption.fileEncryption.length > 200) {
             this.metrics.encryption.fileEncryption = this.metrics.encryption.fileEncryption.slice(-200);
         }
@@ -348,15 +324,17 @@ class PerformanceMetrics {
         
         this.totalOps++;
         
+        console.log(`🔐 ENCRYPT: ${(fileSize / (1024 * 1024)).toFixed(2)}MB in ${duration.toFixed(2)}ms @ ${(throughput / (1024 * 1024)).toFixed(2)} MB/s`);
+        
         return { duration, throughput, sizeCategory, exactTestSize };
     }
     
     /**
-     * Measure file decryption with your specific size categorization
+     * Measure file decryption - tracks decryption time only
      */
     measureFileDecryption(fileSize, startTime, endTime, algorithm = 'AES-GCM-256') {
         const duration = endTime - startTime;
-        const throughput = fileSize / (duration / 1000); // bytes per second
+        const throughput = fileSize / (duration / 1000);
         const sizeCategory = this.categorizeFileSize(fileSize);
         const exactTestSize = this.getExactTestSize(fileSize);
         
@@ -367,20 +345,19 @@ class PerformanceMetrics {
             sizeCategory,
             exactTestSize,
             throughput,
+            throughputMBps: throughput / (1024 * 1024),
             algorithm,
+            operation: 'decrypt',
             timestamp: Date.now(),
             sessionId: this.sessionId
         };
         
-        // Add to main array
         this.metrics.encryption.fileDecryption.push(metric);
         
-        // Add to exact test size category if it matches
         if (exactTestSize && this.metrics.encryption.bySize[exactTestSize]) {
             this.metrics.encryption.bySize[exactTestSize].push(metric);
         }
         
-        // Keep limits
         if (this.metrics.encryption.fileDecryption.length > 200) {
             this.metrics.encryption.fileDecryption = this.metrics.encryption.fileDecryption.slice(-200);
         }
@@ -392,11 +369,91 @@ class PerformanceMetrics {
         
         this.totalOps++;
         
+        console.log(`🔓 DECRYPT: ${(fileSize / (1024 * 1024)).toFixed(2)}MB in ${duration.toFixed(2)}ms @ ${(throughput / (1024 * 1024)).toFixed(2)} MB/s`);
+        
         return { duration, throughput, sizeCategory, exactTestSize };
     }
     
     /**
-     * Measure Google Drive upload with your specific size categorization
+     * Measure complete file upload - encryption + upload combined
+     */
+    measureCompleteUpload(fileSize, encryptDuration, uploadDuration, metadata = {}) {
+        const totalDuration = encryptDuration + uploadDuration;
+        const totalThroughput = fileSize / (totalDuration / 1000);
+        const exactTestSize = this.getExactTestSize(fileSize);
+        
+        const metric = {
+            fileSize,
+            formattedSize: this.formatFileSize(fileSize),
+            exactTestSize,
+            encryptMs: encryptDuration,
+            uploadMs: uploadDuration,
+            totalMs: totalDuration,
+            encryptThroughputMBps: (fileSize / (encryptDuration / 1000)) / (1024 * 1024),
+            uploadThroughputMBps: (fileSize / (uploadDuration / 1000)) / (1024 * 1024),
+            totalThroughputMBps: totalThroughput / (1024 * 1024),
+            timestamp: Date.now(),
+            sessionId: this.sessionId,
+            ...metadata
+        };
+        
+        if (!this.metrics.transfer.totalUpload) {
+            this.metrics.transfer.totalUpload = [];
+        }
+        this.metrics.transfer.totalUpload.push(metric);
+        
+        if (exactTestSize && this.metrics.transfer.bySize[exactTestSize]) {
+            this.metrics.transfer.bySize[exactTestSize].push(metric);
+        }
+        
+        console.log(`📤 UPLOAD TOTAL: ${(fileSize / (1024 * 1024)).toFixed(2)}MB in ${totalDuration.toFixed(2)}ms`);
+        console.log(`   - Encrypt: ${encryptDuration.toFixed(2)}ms (${metric.encryptThroughputMBps.toFixed(2)} MB/s)`);
+        console.log(`   - Upload: ${uploadDuration.toFixed(2)}ms (${metric.uploadThroughputMBps.toFixed(2)} MB/s)`);
+        
+        return metric;
+    }
+    
+    /**
+     * Measure complete file download - download + decryption combined
+     */
+    measureCompleteDownload(fileSize, downloadDuration, decryptDuration, metadata = {}) {
+        const totalDuration = downloadDuration + decryptDuration;
+        const totalThroughput = fileSize / (totalDuration / 1000);
+        const exactTestSize = this.getExactTestSize(fileSize);
+        
+        const metric = {
+            fileSize,
+            formattedSize: this.formatFileSize(fileSize),
+            exactTestSize,
+            downloadMs: downloadDuration,
+            decryptMs: decryptDuration,
+            totalMs: totalDuration,
+            downloadThroughputMBps: (fileSize / (downloadDuration / 1000)) / (1024 * 1024),
+            decryptThroughputMBps: (fileSize / (decryptDuration / 1000)) / (1024 * 1024),
+            totalThroughputMBps: totalThroughput / (1024 * 1024),
+            timestamp: Date.now(),
+            sessionId: this.sessionId,
+            ...metadata
+        };
+        
+        if (!this.metrics.transfer.totalDownload) {
+            this.metrics.transfer.totalDownload = [];
+        }
+        this.metrics.transfer.totalDownload.push(metric);
+        
+        if (exactTestSize && this.metrics.transfer.bySize[exactTestSize]) {
+            this.metrics.transfer.bySize[exactTestSize].push(metric);
+        }
+        
+        console.log(`📥 DOWNLOAD TOTAL: ${(fileSize / (1024 * 1024)).toFixed(2)}MB in ${totalDuration.toFixed(2)}ms`);
+        console.log(`   - Download: ${downloadDuration.toFixed(2)}ms (${metric.downloadThroughputMBps.toFixed(2)} MB/s)`);
+        console.log(`   - Decrypt: ${decryptDuration.toFixed(2)}ms (${metric.decryptThroughputMBps.toFixed(2)} MB/s)`);
+        
+        return metric;
+    }
+    
+    /**
+     * Measure Google Drive upload - tracks upload time only
      */
     measureGoogleDriveUpload(fileSize, duration, status, metadata = {}) {
         const throughput = fileSize / (duration / 1000);
@@ -410,21 +467,20 @@ class PerformanceMetrics {
             sizeCategory,
             exactTestSize,
             throughput,
+            throughputMBps: throughput / (1024 * 1024),
             status,
+            operation: 'upload',
             timestamp: Date.now(),
             sessionId: this.sessionId,
             ...metadata
         };
         
-        // Add to main array
         this.metrics.network.googleDriveUpload.push(metric);
         
-        // Add to exact test size category if it matches
         if (exactTestSize && this.metrics.network.bySize[exactTestSize]) {
             this.metrics.network.bySize[exactTestSize].push(metric);
         }
         
-        // Keep limits
         if (this.metrics.network.googleDriveUpload.length > 200) {
             this.metrics.network.googleDriveUpload = this.metrics.network.googleDriveUpload.slice(-200);
         }
@@ -436,11 +492,13 @@ class PerformanceMetrics {
         
         this.totalOps++;
         
+        console.log(`☁️ UPLOAD: ${(fileSize / (1024 * 1024)).toFixed(2)}MB in ${duration.toFixed(2)}ms @ ${(throughput / (1024 * 1024)).toFixed(2)} MB/s`);
+        
         return { duration, throughput, sizeCategory, exactTestSize };
     }
     
     /**
-     * Measure Google Drive download with your specific size categorization
+     * Measure Google Drive download - tracks download time only
      */
     measureGoogleDriveDownload(fileSize, duration, status, metadata = {}) {
         const throughput = fileSize / (duration / 1000);
@@ -454,21 +512,20 @@ class PerformanceMetrics {
             sizeCategory,
             exactTestSize,
             throughput,
+            throughputMBps: throughput / (1024 * 1024),
             status,
+            operation: 'download',
             timestamp: Date.now(),
             sessionId: this.sessionId,
             ...metadata
         };
         
-        // Add to main array
         this.metrics.network.googleDriveDownload.push(metric);
         
-        // Add to exact test size category if it matches
         if (exactTestSize && this.metrics.network.bySize[exactTestSize]) {
             this.metrics.network.bySize[exactTestSize].push(metric);
         }
         
-        // Keep limits
         if (this.metrics.network.googleDriveDownload.length > 200) {
             this.metrics.network.googleDriveDownload = this.metrics.network.googleDriveDownload.slice(-200);
         }
@@ -479,6 +536,8 @@ class PerformanceMetrics {
         }
         
         this.totalOps++;
+        
+        console.log(`☁️ DOWNLOAD: ${(fileSize / (1024 * 1024)).toFixed(2)}MB in ${duration.toFixed(2)}ms @ ${(throughput / (1024 * 1024)).toFixed(2)} MB/s`);
         
         return { duration, throughput, sizeCategory, exactTestSize };
     }
@@ -590,15 +649,12 @@ class PerformanceMetrics {
         const min = durations[0];
         const max = durations[durations.length - 1];
         
-        // Standard deviation
         const squareDiffs = durations.map(value => {
             const diff = value - mean;
             return diff * diff;
         });
         const avgSquareDiff = squareDiffs.reduce((a, b) => a + b, 0) / durations.length;
         const stdDev = Math.sqrt(avgSquareDiff);
-        
-        // Coefficient of variation (for comparing variability across sizes)
         const cv = (stdDev / mean) * 100;
         
         const result = {
@@ -614,9 +670,8 @@ class PerformanceMetrics {
             unit: 'ms'
         };
         
-        // Add throughput if available
         const throughputs = data
-            .map(m => m.throughput)
+            .map(m => m.throughputMBps || (m.throughput ? m.throughput / (1024 * 1024) : null))
             .filter(t => t !== undefined && t !== null && !isNaN(t));
         
         if (throughputs.length > 0) {
@@ -624,9 +679,9 @@ class PerformanceMetrics {
             const throughputMean = throughputSum / throughputs.length;
             
             result.throughput = {
-                mean: throughputMean / (1024 * 1024), // MB/s
+                mean: throughputMean,
                 unit: 'MB/s',
-                stdDev: this.calculateStdDev(throughputs) / (1024 * 1024)
+                stdDev: this.calculateStdDev(throughputs)
             };
         }
         
@@ -654,12 +709,16 @@ class PerformanceMetrics {
                 bySize: {},
                 summary: {}
             },
+            transfer: {
+                bySize: {},
+                summary: {}
+            },
             sharing: {},
             memory: {},
             system: {}
         };
         
-        // Calculate overall statistics for encryption
+        // Encryption statistics
         if (this.metrics.encryption.fileEncryption.length > 0) {
             stats.encryption.summary.fileEncryption = this.calculateStatisticsForDataset(this.metrics.encryption.fileEncryption);
         }
@@ -667,7 +726,7 @@ class PerformanceMetrics {
             stats.encryption.summary.fileDecryption = this.calculateStatisticsForDataset(this.metrics.encryption.fileDecryption);
         }
         
-        // Calculate statistics by your specific test sizes for encryption
+        // Encryption by size
         for (const [sizeCat, measurements] of Object.entries(this.metrics.encryption.bySize)) {
             if (measurements.length > 0) {
                 const fileEncryption = this.calculateStatisticsForDataset(measurements);
@@ -682,7 +741,7 @@ class PerformanceMetrics {
             }
         }
         
-        // Calculate overall statistics for network
+        // Network statistics
         if (this.metrics.network.googleDriveUpload.length > 0) {
             stats.network.summary.googleDriveUpload = this.calculateStatisticsForDataset(this.metrics.network.googleDriveUpload);
         }
@@ -690,7 +749,7 @@ class PerformanceMetrics {
             stats.network.summary.googleDriveDownload = this.calculateStatisticsForDataset(this.metrics.network.googleDriveDownload);
         }
         
-        // Calculate statistics by your specific test sizes for network
+        // Network by size
         for (const [sizeCat, measurements] of Object.entries(this.metrics.network.bySize)) {
             if (measurements.length > 0) {
                 const upload = this.calculateStatisticsForDataset(measurements);
@@ -705,21 +764,44 @@ class PerformanceMetrics {
             }
         }
         
-        // Calculate OPAQUE statistics
+        // Transfer statistics (complete upload/download)
+        if (this.metrics.transfer.totalUpload && this.metrics.transfer.totalUpload.length > 0) {
+            stats.transfer.summary.totalUpload = this.calculateStatisticsForDataset(this.metrics.transfer.totalUpload);
+        }
+        if (this.metrics.transfer.totalDownload && this.metrics.transfer.totalDownload.length > 0) {
+            stats.transfer.summary.totalDownload = this.calculateStatisticsForDataset(this.metrics.transfer.totalDownload);
+        }
+        
+        // Transfer by size
+        for (const [sizeCat, measurements] of Object.entries(this.metrics.transfer.bySize)) {
+            if (measurements && measurements.length > 0) {
+                const upload = this.calculateStatisticsForDataset(measurements);
+                const download = this.calculateStatisticsForDataset(measurements);
+                
+                stats.transfer.bySize[sizeCat] = {
+                    name: sizeCat,
+                    bytes: this.sizeCategories[sizeCat]?.bytes,
+                    upload,
+                    download
+                };
+            }
+        }
+        
+        // OPAQUE statistics
         for (const [op, measurements] of Object.entries(this.metrics.opaque)) {
             if (measurements.length > 0) {
                 stats.opaque[op] = this.calculateStatisticsForDataset(measurements);
             }
         }
         
-        // Calculate sharing statistics
+        // Sharing statistics
         for (const [shareType, measurements] of Object.entries(this.metrics.sharing)) {
             if (measurements.length > 0) {
                 stats.sharing[shareType] = this.calculateStatisticsForDataset(measurements);
             }
         }
         
-        // Calculate error rate
+        // System statistics
         stats.system = {
             totalOperations: this.totalOps,
             errorCount: this.errorCount,
@@ -731,9 +813,6 @@ class PerformanceMetrics {
         return stats;
     }
     
-    /**
-     * Generate size-categorized summary for research paper with your test sizes
-     */
     generateSizeCategorizedSummary() {
         const summary = [];
         
@@ -746,7 +825,6 @@ class PerformanceMetrics {
         summary.push('Test Size | Count | Encrypt (ms)    | Decrypt (ms)    | Throughput (MB/s) | StdDev');
         summary.push('----------|-------|-----------------|-----------------|-------------------|--------');
         
-        // Sort test sizes by bytes
         const sortedSizes = [...this.testSizes].sort((a, b) => a.bytes - b.bytes);
         
         for (const size of sortedSizes) {
@@ -768,105 +846,118 @@ class PerformanceMetrics {
             }
         }
         
-        // Network by size
+        // Network by size (separate upload/download)
         summary.push('\n🌐 GOOGLE DRIVE PERFORMANCE');
         summary.push('-'.repeat(100));
-        summary.push('Test Size | Count | Upload (ms)    | Download (ms)  | Throughput (MB/s) | StdDev');
-        summary.push('----------|-------|----------------|----------------|-------------------|--------');
+        summary.push('Test Size | Count | Upload (ms)    | Download (ms)  | Upload MB/s | Download MB/s');
+        summary.push('----------|-------|----------------|----------------|-------------|---------------');
         
         for (const size of sortedSizes) {
-            const measurements = this.metrics.network.bySize[size.name];
-            if (measurements && measurements.length > 0) {
-                const uploadStats = this.calculateStatisticsForDataset(measurements);
-                const downloadStats = this.calculateStatisticsForDataset(measurements);
+            const uploadMeasurements = this.metrics.network.googleDriveUpload.filter(m => m.exactTestSize === size.name);
+            const downloadMeasurements = this.metrics.network.googleDriveDownload.filter(m => m.exactTestSize === size.name);
+            
+            if (uploadMeasurements.length > 0 || downloadMeasurements.length > 0) {
+                const uploadStats = this.calculateStatisticsForDataset(uploadMeasurements);
+                const downloadStats = this.calculateStatisticsForDataset(downloadMeasurements);
                 
-                if (uploadStats) {
-                    const name = size.name.padEnd(8);
-                    const count = uploadStats.count.toString().padEnd(5);
-                    const upload = uploadStats.mean.toFixed(2).padEnd(14);
-                    const download = downloadStats ? downloadStats.mean.toFixed(2).padEnd(14) : 'N/A'.padEnd(14);
-                    const throughput = uploadStats.throughput ? uploadStats.throughput.mean.toFixed(2).padEnd(17) : 'N/A'.padEnd(17);
-                    const stdDev = uploadStats.stdDev ? `±${uploadStats.stdDev.toFixed(2)}` : 'N/A';
-                    
-                    summary.push(`${name} | ${count} | ${upload} | ${download} | ${throughput} | ${stdDev}`);
-                }
+                const name = size.name.padEnd(8);
+                const count = (uploadStats?.count || downloadStats?.count || 0).toString().padEnd(5);
+                const upload = uploadStats ? uploadStats.mean.toFixed(2).padEnd(14) : 'N/A'.padEnd(14);
+                const download = downloadStats ? downloadStats.mean.toFixed(2).padEnd(14) : 'N/A'.padEnd(14);
+                const uploadThroughput = uploadStats?.throughput ? uploadStats.throughput.mean.toFixed(2).padEnd(11) : 'N/A'.padEnd(11);
+                const downloadThroughput = downloadStats?.throughput ? downloadStats.throughput.mean.toFixed(2).padEnd(13) : 'N/A'.padEnd(13);
+                
+                summary.push(`${name} | ${count} | ${upload} | ${download} | ${uploadThroughput} | ${downloadThroughput}`);
+            }
+        }
+        
+        // Total transfer (encrypt+upload and download+decrypt)
+        summary.push('\n📦 TOTAL TRANSFER PERFORMANCE (Encrypt+Upload & Download+Decrypt)');
+        summary.push('-'.repeat(100));
+        summary.push('Test Size | Upload (ms) | Upload MB/s | Download (ms) | Download MB/s');
+        summary.push('----------|-------------|-------------|---------------|---------------');
+        
+        for (const size of sortedSizes) {
+            const uploadMeasurements = this.metrics.transfer.totalUpload?.filter(m => m.exactTestSize === size.name) || [];
+            const downloadMeasurements = this.metrics.transfer.totalDownload?.filter(m => m.exactTestSize === size.name) || [];
+            
+            if (uploadMeasurements.length > 0 || downloadMeasurements.length > 0) {
+                const uploadStats = this.calculateStatisticsForDataset(uploadMeasurements);
+                const downloadStats = this.calculateStatisticsForDataset(downloadMeasurements);
+                
+                const name = size.name.padEnd(8);
+                const uploadTime = uploadStats ? uploadStats.mean.toFixed(2).padEnd(11) : 'N/A'.padEnd(11);
+                const uploadSpeed = uploadStats?.throughput ? uploadStats.throughput.mean.toFixed(2).padEnd(11) : 'N/A'.padEnd(11);
+                const downloadTime = downloadStats ? downloadStats.mean.toFixed(2).padEnd(13) : 'N/A'.padEnd(13);
+                const downloadSpeed = downloadStats?.throughput ? downloadStats.throughput.mean.toFixed(2).padEnd(13) : 'N/A'.padEnd(13);
+                
+                summary.push(`${name} | ${uploadTime} | ${uploadSpeed} | ${downloadTime} | ${downloadSpeed}`);
             }
         }
         
         return summary.join('\n');
     }
     
-    /**
-     * Generate CSV data for research export
-     */
     generateCSV() {
         const csvData = {};
         
-        // Generate CSV for each test size
-        for (const size of this.testSizes) {
-            // Encryption CSV for this size
-            const encMeasurements = this.metrics.encryption.bySize[size.name];
-            if (encMeasurements && encMeasurements.length > 0) {
-                const key = `encryption_${size.name}`;
-                
-                const fields = new Set(['timestamp', 'duration', 'fileSize', 'formattedSize', 'throughput', 'algorithm']);
-                const headers = Array.from(fields);
-                const rows = encMeasurements.map(m => 
-                    headers.map(h => {
-                        const val = m[h];
-                        if (val === undefined || val === null) return '';
-                        return val;
-                    }).join(',')
-                );
-                
-                csvData[key] = {
-                    headers: headers.join(','),
-                    data: rows.join('\n')
-                };
-            }
-            
-            // Network CSV for this size
-            const netMeasurements = this.metrics.network.bySize[size.name];
-            if (netMeasurements && netMeasurements.length > 0) {
-                const key = `network_${size.name}`;
-                
-                const fields = new Set(['timestamp', 'duration', 'fileSize', 'formattedSize', 'throughput', 'status']);
-                const headers = Array.from(fields);
-                const rows = netMeasurements.map(m => 
-                    headers.map(h => {
-                        const val = m[h];
-                        if (val === undefined || val === null) return '';
-                        return val;
-                    }).join(',')
-                );
-                
-                csvData[key] = {
-                    headers: headers.join(','),
-                    data: rows.join('\n')
-                };
-            }
+        // Encryption CSV
+        if (this.metrics.encryption.fileEncryption.length > 0) {
+            const encFields = ['timestamp', 'duration', 'fileSize', 'formattedSize', 'throughputMBps', 'algorithm', 'operation'];
+            csvData['encryption'] = {
+                headers: encFields.join(','),
+                data: this.metrics.encryption.fileEncryption.map(m => 
+                    encFields.map(h => m[h] !== undefined ? m[h] : '').join(',')
+                ).join('\n')
+            };
         }
         
-        // Add OPAQUE CSV
-        if (this.metrics.opaque.login.length > 0) {
-            const fields = new Set(['timestamp', 'duration', 'email']);
-            const headers = Array.from(fields);
-            const rows = this.metrics.opaque.login.map(m => 
-                headers.map(h => m[h] || '').join(',')
-            );
-            
-            csvData['opaque_login'] = {
-                headers: headers.join(','),
-                data: rows.join('\n')
+        // Upload CSV
+        if (this.metrics.network.googleDriveUpload.length > 0) {
+            const uploadFields = ['timestamp', 'duration', 'fileSize', 'formattedSize', 'throughputMBps', 'status', 'operation'];
+            csvData['upload'] = {
+                headers: uploadFields.join(','),
+                data: this.metrics.network.googleDriveUpload.map(m => 
+                    uploadFields.map(h => m[h] !== undefined ? m[h] : '').join(',')
+                ).join('\n')
+            };
+        }
+        
+        // Download CSV
+        if (this.metrics.network.googleDriveDownload.length > 0) {
+            const downloadFields = ['timestamp', 'duration', 'fileSize', 'formattedSize', 'throughputMBps', 'status', 'operation'];
+            csvData['download'] = {
+                headers: downloadFields.join(','),
+                data: this.metrics.network.googleDriveDownload.map(m => 
+                    downloadFields.map(h => m[h] !== undefined ? m[h] : '').join(',')
+                ).join('\n')
+            };
+        }
+        
+        // Complete transfer CSV
+        if (this.metrics.transfer.totalUpload && this.metrics.transfer.totalUpload.length > 0) {
+            const transferFields = ['timestamp', 'fileSize', 'formattedSize', 'encryptMs', 'uploadMs', 'totalMs', 'encryptThroughputMBps', 'uploadThroughputMBps', 'totalThroughputMBps'];
+            csvData['complete_upload'] = {
+                headers: transferFields.join(','),
+                data: this.metrics.transfer.totalUpload.map(m => 
+                    transferFields.map(h => m[h] !== undefined ? m[h] : '').join(',')
+                ).join('\n')
+            };
+        }
+        
+        if (this.metrics.transfer.totalDownload && this.metrics.transfer.totalDownload.length > 0) {
+            const transferFields = ['timestamp', 'fileSize', 'formattedSize', 'downloadMs', 'decryptMs', 'totalMs', 'downloadThroughputMBps', 'decryptThroughputMBps', 'totalThroughputMBps'];
+            csvData['complete_download'] = {
+                headers: transferFields.join(','),
+                data: this.metrics.transfer.totalDownload.map(m => 
+                    transferFields.map(h => m[h] !== undefined ? m[h] : '').join(',')
+                ).join('\n')
             };
         }
         
         return csvData;
     }
     
-    /**
-     * Export full metrics for research paper
-     */
     exportMetrics() {
         return {
             sessionInfo: {
@@ -889,9 +980,6 @@ class PerformanceMetrics {
         };
     }
     
-    /**
-     * Reset metrics for new session
-     */
     reset() {
         this.metrics = {
             opaque: { registration: [], login: [], keyDerivation: [] },
@@ -910,6 +998,11 @@ class PerformanceMetrics {
                 shareLinkGeneration: [],
                 bySize: this.initializeSizeCategories()
             },
+            transfer: {
+                totalUpload: [],
+                totalDownload: [],
+                bySize: this.initializeSizeCategories()
+            },
             sharing: { publicShareCreation: [], privateShareCreation: [], shareVerification: [], shareAccess: [] },
             memory: { heapUsage: [], keyStorageSize: [], garbageCollection: [] },
             system: { totalOperations: 0, errorCount: 0, errors: [] }
@@ -923,9 +1016,6 @@ class PerformanceMetrics {
         this.startMemoryMonitoring();
     }
     
-    /**
-     * Clean up resources
-     */
     destroy() {
         if (this.memoryInterval) {
             clearInterval(this.memoryInterval);

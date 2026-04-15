@@ -492,33 +492,55 @@ export async function downloadFromGoogleDrive(fileId) {
 /**
  * List user's encrypted files
  */
-export async function listUserFiles() {
-    try {
-        const savedToken = getSavedToken();
-        if (!savedToken) {
-            await authenticateGoogleDrive();
-        } else if (!accessToken) {
-            accessToken = savedToken;
-            window.gapi.client.setToken({ access_token: accessToken });
+    export async function listUserFiles(pageSize = 100) {
+        try {
+            const savedToken = getSavedToken();
+            if (!savedToken) {
+                await authenticateGoogleDrive();
+            } else if (!accessToken) {
+                accessToken = savedToken;
+                window.gapi.client.setToken({ access_token: accessToken });
+            }
+
+            const folderId = await getOrCreateAppFolder();
+            
+            let allFiles = [];
+            let pageToken = null;
+            let hasMore = true;
+            
+            console.log('📂 Fetching all files from Google Drive folder:', folderId);
+            
+            while (hasMore) {
+                const request = {
+                    q: `'${folderId}' in parents and trashed=false`,
+                    pageSize: pageSize,
+                    fields: 'files(id, name, size, createdTime, modifiedTime, mimeType), nextPageToken',
+                    orderBy: 'modifiedTime desc',
+                    supportsAllDrives: true,
+                    includeItemsFromAllDrives: true
+                };
+                
+                if (pageToken) {
+                    request.pageToken = pageToken;
+                }
+                
+                const response = await window.gapi.client.drive.files.list(request);
+                const files = response.result.files || [];
+                allFiles = allFiles.concat(files);
+                
+                pageToken = response.result.nextPageToken;
+                hasMore = !!pageToken;
+                
+                console.log(`📥 Fetched ${files.length} files, total so far: ${allFiles.length}`);
+            }
+            
+            console.log(`✅ Total files retrieved: ${allFiles.length}`);
+            return allFiles;
+        } catch (error) {
+            console.error('❌ Failed to list files:', error);
+            throw error;
         }
-
-        const folderId = await getOrCreateAppFolder();
-
-        const response = await window.gapi.client.drive.files.list({
-            q: `'${folderId}' in parents and trashed=false`,
-            pageSize: 100,
-            fields: 'files(id, name, size, createdTime, modifiedTime, mimeType)',
-            orderBy: 'modifiedTime desc',
-            supportsAllDrives: true,
-            includeItemsFromAllDrives: true
-        });
-
-        return response.result.files || [];
-    } catch (error) {
-        console.error('❌ Failed to list files:', error);
-        throw error;
     }
-}
 
 /**
  * Delete file from Google Drive
