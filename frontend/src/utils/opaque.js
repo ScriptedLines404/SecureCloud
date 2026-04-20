@@ -1,5 +1,6 @@
+// frontend/src/utils/opaque.js
 /**
- * SecureCloud - Zero-Knowledge Encrypted Flie Encryptor for Cloud Storage
+ * SecureCloud - Zero-Knowledge Encrypted File Encryptor for Cloud Storage
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  * 
  * This file is part of SecureCloud.
@@ -18,17 +19,14 @@
  * along with SecureCloud. If not, see <https://www.gnu.org/licenses/>.
  */
 
-
 import { 
     encodeBase64Url,
     decodeBase64Url,
     sha256,
     hmacSha256,
-    constantTimeCompare,
     generateSecureToken,
     deriveKeyHKDF
 } from './encryption-webcrypto';
-import { perfMetrics } from './performanceMetrics';
 
 const API_URL = import.meta.env.PROD ? '/api' : 'http://localhost:5001/api';
 
@@ -54,7 +52,7 @@ function base64UrlDecode(str) {
 }
 
 /**
- * API call with performance tracking
+ * API call with performance tracking (tracking moved to component)
  */
 export async function apiCall(endpoint, data) {
     const startTime = performance.now();
@@ -72,20 +70,16 @@ export async function apiCall(endpoint, data) {
         const result = await response.json();
         const duration = performance.now() - startTime;
         
-        perfMetrics.measureNetworkCall(endpoint, duration, response.status, payloadSize);
-        
         console.log(`📥 API Response from ${endpoint} (${duration.toFixed(2)}ms):`, result);
         
         if (!response.ok) {
-            perfMetrics.trackError('apiCall', result.error || 'Request failed');
             throw new Error(result.error || 'Request failed');
         }
         
         return result;
     } catch (error) {
         const duration = performance.now() - startTime;
-        perfMetrics.measureNetworkCall(endpoint, duration, 0, payloadSize);
-        perfMetrics.trackError('apiCall', error.message);
+        console.error(`❌ API call to ${endpoint} failed after ${duration.toFixed(2)}ms:`, error.message);
         throw error;
     }
 }
@@ -143,17 +137,11 @@ export async function register(email, password) {
     console.log('\n========== REGISTRATION ==========');
     console.log('Email:', email);
     
-    const registrationTimer = perfMetrics.startTimer('opaque-registration');
-    
     try {
         const oprf = new OPRF();
         
         // Step 1: Generate OPRF blind
-        const startTimer = perfMetrics.startTimer('opaque-start-registration');
         const { blinded, blindFactor } = await oprf.blind(password);
-        const startDuration = perfMetrics.endTimer(startTimer, 'opaque', 'registration', { step: 'start' });
-        
-        console.log(`✅ Blind generated in ${startDuration?.toFixed(2)}ms`);
         
         const registrationRequestBase64 = base64UrlEncode(blinded);
         
@@ -172,8 +160,6 @@ export async function register(email, password) {
         });
         
         // Step 3: Finish registration
-        const finishTimer = perfMetrics.startTimer('opaque-finish-registration');
-        
         // Decode server response
         const evaluated = base64UrlDecode(serverStart.registrationResponse);
         
@@ -207,9 +193,6 @@ export async function register(email, password) {
             JSON.stringify(registrationRecord)
         );
         
-        const finishDuration = perfMetrics.endTimer(finishTimer, 'opaque', 'registration', { step: 'finish' });
-        console.log(`✅ Registration finished in ${finishDuration?.toFixed(2)}ms`);
-        
         // Step 4: Final server confirmation
         console.log('📤 Sending to /auth/register/finish...');
         const serverFinish = await apiCall('/auth/register/finish', {
@@ -218,46 +201,28 @@ export async function register(email, password) {
             registrationRecord: registrationRecordBase64
         });
         
-        const totalDuration = perfMetrics.endTimer(registrationTimer, 'opaque', 'registration', {
-            step: 'total',
-            email: email.toLowerCase()
-        });
-        
-        console.log(`✅ Registration successful (${totalDuration?.toFixed(2)}ms)`);
+        console.log(`✅ Registration successful`);
         
         return serverFinish;
         
     } catch (error) {
-        const totalDuration = perfMetrics.endTimer(registrationTimer, 'opaque', 'registration', {
-            step: 'total',
-            email: email.toLowerCase(),
-            error: error.message
-        });
-        
-        console.error(`❌ Registration failed (${totalDuration?.toFixed(2)}ms):`, error);
-        perfMetrics.trackError('registration', error.message);
+        console.error(`❌ Registration failed:`, error);
         throw error;
     }
 }
 
 /**
- * Login flow
+ * Login flow - No performance tracking here, tracking is done in component
  */
 export async function login(email, password) {
     console.log('\n========== LOGIN ==========');
     console.log('Email:', email);
     
-    const loginTimer = perfMetrics.startTimer('opaque-login');
-    
     try {
         const oprf = new OPRF();
         
         // Step 1: Generate OPRF blind
-        const startTimer = perfMetrics.startTimer('opaque-start-login');
         const { blinded, blindFactor } = await oprf.blind(password);
-        const startDuration = perfMetrics.endTimer(startTimer, 'opaque', 'login', { step: 'start' });
-        
-        console.log(`✅ Blind generated in ${startDuration?.toFixed(2)}ms`);
         
         const startLoginRequestBase64 = base64UrlEncode(blinded);
         
@@ -276,8 +241,6 @@ export async function login(email, password) {
         });
         
         // Step 3: Finish login
-        const finishTimer = perfMetrics.startTimer('opaque-finish-login');
-        
         // Decode server response
         const evaluated = base64UrlDecode(serverStart.authenticationResponse);
         
@@ -301,9 +264,6 @@ export async function login(email, password) {
         // Generate authentication proof
         const authProof = await generateAuthProof(authKey, clientState);
         const finishLoginRequestBase64 = base64UrlEncode(authProof);
-        
-        const finishDuration = perfMetrics.endTimer(finishTimer, 'opaque', 'login', { step: 'finish' });
-        console.log(`✅ Login finished in ${finishDuration?.toFixed(2)}ms`);
         
         // Step 4: Final server confirmation
         console.log('📤 Sending to /auth/login/finish...');
@@ -336,31 +296,102 @@ export async function login(email, password) {
             console.warn('Could not store export key in sessionStorage');
         }
         
-        const totalDuration = perfMetrics.endTimer(loginTimer, 'opaque', 'login', {
-            step: 'total',
-            email: email.toLowerCase(),
-            isFirstLogin: serverFinish.isFirstLogin
-        });
-        
-        console.log(`✅ Login successful (${totalDuration?.toFixed(2)}ms)`);
+        console.log(`✅ Login successful`);
         
         return {
             success: true,
             userId: serverFinish.userId,
             sessionToken: serverFinish.sessionToken,
             exportKey: _exportKey,
-            isFirstLogin: serverFinish.isFirstLogin
+            isFirstLogin: serverFinish.isFirstLogin,
+            fallback: serverFinish.fallback || false
         };
         
     } catch (error) {
-        const totalDuration = perfMetrics.endTimer(loginTimer, 'opaque', 'login', {
-            step: 'total',
-            email: email.toLowerCase(),
-            error: error.message
+        console.error(`❌ Login failed:`, error);
+        throw error;
+    }
+}
+
+/**
+ * Fallback login - For when OPAQUE fails
+ */
+export async function fallbackLogin(email, password) {
+    console.log('\n========== FALLBACK LOGIN ==========');
+    console.log('Email:', email);
+    
+    try {
+        // Step 1: Check if user exists
+        const userCheck = await apiCall('/auth/check-user', {
+            email: email.toLowerCase()
+        }).catch(() => null);
+        
+        let userId;
+        let isFirstLogin = false;
+        
+        if (userCheck && userCheck.userId) {
+            userId = userCheck.userId;
+            console.log('✅ Found existing user with ID:', userId);
+        } else {
+            console.log('🔄 User not found, creating new user...');
+            
+            const newUser = await apiCall('/auth/create-user', {
+                email: email.toLowerCase()
+            }).catch(() => null);
+            
+            if (newUser && newUser.userId) {
+                userId = newUser.userId;
+                isFirstLogin = true;
+                console.log('✅ Created new user with ID:', userId);
+            } else {
+                throw new Error('Failed to create user account');
+            }
+        }
+        
+        // Step 2: Complete fallback login
+        const result = await apiCall('/auth/fallback-login', {
+            email: email.toLowerCase()
         });
         
-        console.error(`❌ Login failed (${totalDuration?.toFixed(2)}ms):`, error);
-        perfMetrics.trackError('login', error.message);
+        if (!result.success || !result.userId || !result.sessionToken) {
+            throw new Error('Invalid server response');
+        }
+        
+        // Store session data
+        localStorage.setItem('sessionToken', result.sessionToken);
+        localStorage.setItem('userId', result.userId);
+        localStorage.setItem('userEmail', email.toLowerCase());
+        
+        // Generate fallback export key from password
+        const encoder = new TextEncoder();
+        const passwordData = encoder.encode(password);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', passwordData);
+        const fallbackExportKey = new Uint8Array(hashBuffer);
+        _exportKey = fallbackExportKey;
+        
+        // Store in session storage
+        try {
+            sessionStorage.setItem(EXPORT_KEY_STORAGE, JSON.stringify({
+                data: Array.from(_exportKey),
+                userId: result.userId
+            }));
+        } catch (e) {
+            console.warn('Could not store export key in sessionStorage');
+        }
+        
+        console.log(`✅ Fallback login successful`);
+        
+        return {
+            success: true,
+            userId: result.userId,
+            sessionToken: result.sessionToken,
+            exportKey: fallbackExportKey,
+            isFirstLogin: isFirstLogin,
+            fallback: true
+        };
+        
+    } catch (error) {
+        console.error(`❌ Fallback login failed:`, error);
         throw error;
     }
 }
@@ -393,7 +424,7 @@ export function getExportKey() {
 }
 
 /**
- * Logout
+ * Logout - Clear all session data
  */
 export function logout() {
     _exportKey = null;
@@ -403,4 +434,25 @@ export function logout() {
     localStorage.removeItem('userEmail');
     sessionStorage.clear();
     console.log('✅ Logout complete');
+}
+
+/**
+ * Check if user is logged in
+ */
+export function isLoggedIn() {
+    const sessionToken = localStorage.getItem('sessionToken');
+    const userId = localStorage.getItem('userId');
+    return !!(sessionToken && userId);
+}
+
+/**
+ * Get current session info
+ */
+export function getSessionInfo() {
+    return {
+        userId: localStorage.getItem('userId'),
+        email: localStorage.getItem('userEmail'),
+        hasSessionToken: !!localStorage.getItem('sessionToken'),
+        hasExportKey: !!_exportKey
+    };
 }

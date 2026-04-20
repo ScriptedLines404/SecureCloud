@@ -26,12 +26,14 @@ import { initializeMasterKey, loadMasterKey, clearMasterKeyFromMemory, setFallba
 import toast from 'react-hot-toast';
 import { isValidEmail } from '../utils/security';
 import { useSecureStorage } from '../hooks/useSecureStorage';
+import { perfMetrics } from '../utils/performanceMetrics';
 
 const LoginOpaque = () => {
     const navigate = useNavigate();
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [loading, setLoading] = useState(false);
     const [attempts, setAttempts] = useSecureStorage('login_attempts', 0, { persistent: true, ttl: 60 });
+    const [loginStarted, setLoginStarted] = useState(false); // Track if login has started
 
     useEffect(() => {
         // Clear any stale master key on component mount
@@ -42,6 +44,13 @@ const LoginOpaque = () => {
         
         const token = localStorage.getItem('sessionToken');
         if (token) navigate('/dashboard', { replace: true });
+        
+        // Reset login tracking on unmount
+        return () => {
+            if (loginStarted) {
+                perfMetrics.cancelLoginAttempt();
+            }
+        };
     }, [navigate]);
 
     const handleChange = (e) => {
@@ -50,6 +59,12 @@ const LoginOpaque = () => {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+        
+        // Prevent multiple submissions
+        if (loading || loginStarted) {
+            console.log('Login already in progress, ignoring duplicate click');
+            return;
+        }
         
         if (!formData.email || !formData.password) {
             toast.error('Please enter both email and password');
@@ -66,18 +81,35 @@ const LoginOpaque = () => {
             return;
         }
 
+        // Start tracking this login attempt (only once)
+        const trackingStarted = perfMetrics.startLoginAttempt(formData.email);
+        if (!trackingStarted) {
+            console.log('Login tracking already in progress');
+            return;
+        }
+        
+        setLoginStarted(true);
         setLoading(true);
+        
+        // Track step timing
+        const stepStartTime = performance.now();
         
         try {
             console.log('Step 1: OPAQUE authentication...');
             const result = await login(formData.email, formData.password);
             
-            console.log('Step 2: OPAQUE success, export key length:', result.exportKey.length);
+            // Track OPAQUE step completion
+            perfMetrics.trackLoginStep('opaque_authentication', performance.now() - stepStartTime);
+            
+            console.log('Step 2: OPAQUE success, export key length:', result.exportKey?.length);
             console.log('Step 2 details:', { 
                 userId: result.userId, 
                 hasSessionToken: !!result.sessionToken,
                 isFallback: result.fallback 
             });
+            
+            // Track key step
+            const keyStepStart = performance.now();
             
             // Set fallback mode if this was a fallback login
             if (result.fallback) {
@@ -100,7 +132,6 @@ const LoginOpaque = () => {
                 toast.success('Master key loaded');
             } catch (loadError) {
                 console.log('No existing key, creating new:', loadError.message);
-                // This is the first login for this user or key doesn't exist
                 masterKey = await initializeMasterKey(result.userId, result.exportKey, { 
                     isFallback: result.fallback 
                 });
@@ -109,10 +140,17 @@ const LoginOpaque = () => {
             }
 
             if (!masterKey) throw new Error('Failed to establish master key');
+            
+            // Track key derivation completion
+            perfMetrics.trackLoginStep('master_key_derivation', performance.now() - keyStepStart);
 
             // Reset attempts on success
             setAttempts(0);
             setFormData({ email: '', password: '' });
+            
+            // Mark login as successful (only once)
+            perfMetrics.finishLoginAttempt(true);
+            setLoginStarted(false);
             
             toast.success(result.fallback ? 'Login successful! ' : 'Login successful');
             
@@ -121,6 +159,11 @@ const LoginOpaque = () => {
 
         } catch (err) {
             console.error('Login error:', err);
+            
+            // Mark login as failed (only once)
+            perfMetrics.finishLoginAttempt(false, err.message);
+            setLoginStarted(false);
+            
             setAttempts(prev => prev + 1);
             toast.error(err.message || 'Login failed');
             setFormData(prev => ({ ...prev, password: '' }));

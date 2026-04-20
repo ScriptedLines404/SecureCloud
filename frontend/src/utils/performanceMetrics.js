@@ -46,17 +46,21 @@ class PerformanceMetrics {
         });
 
         this.metrics = {
-            // Authentication metrics
+            // Authentication metrics - store complete login attempts
             opaque: {
-                registration: [],
-                login: [],
+                registration: [],      // Complete registration attempts
+                login: [],            // Complete login attempts (one entry per login)
+                loginSteps: {         // Individual steps for debugging
+                    start: [],
+                    finish: []
+                },
                 keyDerivation: []
             },
             
             // Encryption metrics with separate upload/download tracking
             encryption: {
-                fileEncryption: [],      // Time to encrypt file
-                fileDecryption: [],      // Time to decrypt file
+                fileEncryption: [],
+                fileDecryption: [],
                 keyGeneration: [],
                 keyWrapping: [],
                 keyUnwrapping: [],
@@ -66,16 +70,16 @@ class PerformanceMetrics {
             // Network metrics with separate upload/download tracking
             network: {
                 apiCalls: [],
-                googleDriveUpload: [],    // Time to upload to Google Drive
-                googleDriveDownload: [],  // Time to download from Google Drive
+                googleDriveUpload: [],
+                googleDriveDownload: [],
                 shareLinkGeneration: [],
                 bySize: this.initializeSizeCategories()
             },
             
             // Transfer metrics (combined view)
             transfer: {
-                totalUpload: [],          // Encryption + Upload combined
-                totalDownload: [],        // Download + Decryption combined
+                totalUpload: [],
+                totalDownload: [],
                 bySize: this.initializeSizeCategories()
             },
             
@@ -101,6 +105,10 @@ class PerformanceMetrics {
                 errors: []
             }
         };
+        
+        // Track current login attempt with deduplication
+        this.currentLoginAttempt = null;
+        this.loginAttemptInProgress = false;  // Add this flag
         
         this.sessionId = this.generateSessionId();
         this.startTime = Date.now();
@@ -282,6 +290,106 @@ class PerformanceMetrics {
             console.warn('Performance measurement error:', error);
         }
         return null;
+    }
+    
+    /**
+     * Start tracking a complete login attempt (only if not already tracking)
+     */
+    startLoginAttempt(email) {
+        // Prevent multiple simultaneous login attempts
+        if (this.loginAttemptInProgress) {
+            console.log('⚠️ Login attempt already in progress, ignoring duplicate start');
+            return false;
+        }
+        
+        this.loginAttemptInProgress = true;
+        this.currentLoginAttempt = {
+            startTime: performance.now(),
+            email: email,
+            steps: {},
+            status: 'in-progress',
+            attemptId: Date.now() + '-' + Math.random().toString(36).substr(2, 6)
+        };
+        console.log(`🔐 Started tracking login attempt #${this.currentLoginAttempt.attemptId} for: ${email}`);
+        return true;
+    }
+    
+    /**
+     * Track a step within the login attempt
+     */
+    trackLoginStep(stepName, duration) {
+        if (this.currentLoginAttempt && this.loginAttemptInProgress) {
+            this.currentLoginAttempt.steps[stepName] = duration;
+        }
+    }
+    
+    /**
+     * Complete the login attempt and record the total duration
+     */
+    finishLoginAttempt(success, error = null) {
+        if (!this.loginAttemptInProgress || !this.currentLoginAttempt) {
+            console.log('⚠️ No login attempt in progress to finish');
+            return null;
+        }
+        
+        const totalDuration = performance.now() - this.currentLoginAttempt.startTime;
+        
+        const loginMetric = {
+            duration: totalDuration,
+            email: this.currentLoginAttempt.email,
+            steps: this.currentLoginAttempt.steps,
+            success: success,
+            error: error,
+            attemptId: this.currentLoginAttempt.attemptId,
+            timestamp: Date.now(),
+            sessionId: this.sessionId
+        };
+        
+        // Store as a single login attempt
+        this.metrics.opaque.login.push(loginMetric);
+        
+        console.log(`🔐 Login ${success ? 'successful' : 'failed'} in ${totalDuration.toFixed(2)}ms (Attempt #${this.currentLoginAttempt.attemptId})`);
+        console.log(`   Steps:`, this.currentLoginAttempt.steps);
+        
+        // Reset tracking
+        this.currentLoginAttempt = null;
+        this.loginAttemptInProgress = false;
+        
+        return totalDuration;
+    }
+    
+    /**
+     * Cancel the current login attempt (if user cancels or error occurs)
+     */
+    cancelLoginAttempt() {
+        if (this.loginAttemptInProgress) {
+            console.log(`❌ Login attempt #${this.currentLoginAttempt?.attemptId} cancelled`);
+            this.currentLoginAttempt = null;
+            this.loginAttemptInProgress = false;
+        }
+    }
+    
+    /**
+     * Track registration attempt (complete)
+     */
+    trackRegistrationAttempt(email, duration, success, error = null) {
+        const registrationMetric = {
+            duration: duration,
+            email: email,
+            success: success,
+            error: error,
+            timestamp: Date.now(),
+            sessionId: this.sessionId
+        };
+        
+        this.metrics.opaque.registration.push(registrationMetric);
+        
+        // Keep only last 100 registrations
+        if (this.metrics.opaque.registration.length > 100) {
+            this.metrics.opaque.registration = this.metrics.opaque.registration.slice(-100);
+        }
+        
+        console.log(`🔐 Registration ${success ? 'successful' : 'failed'} in ${duration.toFixed(2)}ms`);
     }
     
     /**
@@ -543,25 +651,23 @@ class PerformanceMetrics {
     }
     
     /**
-     * Measure OPAQUE protocol steps
+     * Measure OPAQUE protocol steps (individual steps for debugging)
      */
-    measureOpaqueOperation(operation, duration, metadata = {}) {
-        if (!this.metrics.opaque[operation]) {
-            this.metrics.opaque[operation] = [];
+    measureOpaqueStep(step, duration, metadata = {}) {
+        if (!this.metrics.opaque.loginSteps[step]) {
+            this.metrics.opaque.loginSteps[step] = [];
         }
         
-        this.metrics.opaque[operation].push({
+        this.metrics.opaque.loginSteps[step].push({
             duration,
             timestamp: Date.now(),
             sessionId: this.sessionId,
             ...metadata
         });
         
-        if (this.metrics.opaque[operation].length > 100) {
-            this.metrics.opaque[operation] = this.metrics.opaque[operation].slice(-100);
+        if (this.metrics.opaque.loginSteps[step].length > 100) {
+            this.metrics.opaque.loginSteps[step] = this.metrics.opaque.loginSteps[step].slice(-100);
         }
-        
-        this.totalOps++;
     }
     
     /**
@@ -696,11 +802,113 @@ class PerformanceMetrics {
     }
     
     /**
+     * Calculate detailed percentiles for OPAQUE authentication
+     * Returns 5th, 25th, 50th (median), 75th, and 95th percentiles
+     * Each login attempt is counted as ONE data point
+     */
+    calculateOpaquePercentiles() {
+        const percentiles = {};
+        
+        // Process login attempts (complete attempts, not individual steps)
+        if (this.metrics.opaque.login && this.metrics.opaque.login.length > 0) {
+            const loginDurations = this.metrics.opaque.login
+                .map(attempt => attempt.duration)
+                .filter(d => d !== undefined && d !== null && !isNaN(d))
+                .sort((a, b) => a - b);
+            
+            if (loginDurations.length > 0) {
+                const getPercentile = (p) => {
+                    const index = Math.ceil((p / 100) * loginDurations.length) - 1;
+                    return loginDurations[Math.max(0, Math.min(index, loginDurations.length - 1))];
+                };
+                
+                percentiles.login = {
+                    count: loginDurations.length,
+                    p5: getPercentile(5),
+                    p25: getPercentile(25),
+                    p50: getPercentile(50),  // median
+                    p75: getPercentile(75),
+                    p95: getPercentile(95),
+                    min: loginDurations[0],
+                    max: loginDurations[loginDurations.length - 1],
+                    mean: loginDurations.reduce((a, b) => a + b, 0) / loginDurations.length,
+                    successful: this.metrics.opaque.login.filter(a => a.success === true).length,
+                    failed: this.metrics.opaque.login.filter(a => a.success === false).length
+                };
+            }
+        }
+        
+        // Process registration attempts
+        if (this.metrics.opaque.registration && this.metrics.opaque.registration.length > 0) {
+            const registrationDurations = this.metrics.opaque.registration
+                .map(attempt => attempt.duration)
+                .filter(d => d !== undefined && d !== null && !isNaN(d))
+                .sort((a, b) => a - b);
+            
+            if (registrationDurations.length > 0) {
+                const getPercentile = (p) => {
+                    const index = Math.ceil((p / 100) * registrationDurations.length) - 1;
+                    return registrationDurations[Math.max(0, Math.min(index, registrationDurations.length - 1))];
+                };
+                
+                percentiles.registration = {
+                    count: registrationDurations.length,
+                    p5: getPercentile(5),
+                    p25: getPercentile(25),
+                    p50: getPercentile(50),
+                    p75: getPercentile(75),
+                    p95: getPercentile(95),
+                    min: registrationDurations[0],
+                    max: registrationDurations[registrationDurations.length - 1],
+                    mean: registrationDurations.reduce((a, b) => a + b, 0) / registrationDurations.length,
+                    successful: this.metrics.opaque.registration.filter(a => a.success === true).length,
+                    failed: this.metrics.opaque.registration.filter(a => a.success === false).length
+                };
+            }
+        }
+        
+        return percentiles;
+    }
+    
+    /**
+     * Generate OPAQUE percentile report
+     */
+    generateOpaquePercentileReport() {
+        const percentiles = this.calculateOpaquePercentiles();
+        
+        let report = '\n🔐 OPAQUE AUTHENTICATION PERCENTILE REPORT\n';
+        report += '='.repeat(90) + '\n';
+        report += 'Each login/registration counted as ONE complete attempt\n';
+        report += '-'.repeat(90) + '\n';
+        report += 'Operation     |   5th   |   25th  |   50th  |   75th  |   95th  |  Count | Success/Fail\n';
+        report += '-'.repeat(90) + '\n';
+        
+        for (const [operation, stats] of Object.entries(percentiles)) {
+            const opName = operation.padEnd(12);
+            const p5 = stats.p5.toFixed(2).padStart(7);
+            const p25 = stats.p25.toFixed(2).padStart(7);
+            const p50 = stats.p50.toFixed(2).padStart(7);
+            const p75 = stats.p75.toFixed(2).padStart(7);
+            const p95 = stats.p95.toFixed(2).padStart(7);
+            const count = stats.count.toString().padStart(6);
+            const successRate = `${stats.successful}/${stats.failed}`;
+            
+            report += `${opName} |${p5} |${p25} |${p50} |${p75} |${p95} |${count} | ${successRate}\n`;
+        }
+        
+        report += '='.repeat(90) + '\n';
+        report += 'Note: All times in milliseconds (ms)\n';
+        report += 'Percentiles: 5th = fastest 5%, 95th = slowest 5%\n';
+        
+        return report;
+    }
+    
+    /**
      * Calculate statistical metrics for research paper
      */
     calculateStatistics() {
         const stats = {
-            opaque: {},
+            opaque: this.calculateOpaquePercentiles(),  // Use percentiles instead
             encryption: {
                 bySize: {},
                 summary: {}
@@ -764,7 +972,7 @@ class PerformanceMetrics {
             }
         }
         
-        // Transfer statistics (complete upload/download)
+        // Transfer statistics
         if (this.metrics.transfer.totalUpload && this.metrics.transfer.totalUpload.length > 0) {
             stats.transfer.summary.totalUpload = this.calculateStatisticsForDataset(this.metrics.transfer.totalUpload);
         }
@@ -784,13 +992,6 @@ class PerformanceMetrics {
                     upload,
                     download
                 };
-            }
-        }
-        
-        // OPAQUE statistics
-        for (const [op, measurements] of Object.entries(this.metrics.opaque)) {
-            if (measurements.length > 0) {
-                stats.opaque[op] = this.calculateStatisticsForDataset(measurements);
             }
         }
         
@@ -955,6 +1156,21 @@ class PerformanceMetrics {
             };
         }
         
+        // OPAQUE login attempts CSV
+        if (this.metrics.opaque.login && this.metrics.opaque.login.length > 0) {
+            const loginFields = ['timestamp', 'duration', 'email', 'success', 'error', 'attemptId', 'steps'];
+            csvData['opaque_login_attempts'] = {
+                headers: loginFields.join(','),
+                data: this.metrics.opaque.login.map(m => 
+                    loginFields.map(h => {
+                        if (h === 'steps') return JSON.stringify(m.steps || {});
+                        if (h === 'error') return m.error || '';
+                        return m[h] !== undefined ? m[h] : '';
+                    }).join(',')
+                ).join('\n')
+            };
+        }
+        
         return csvData;
     }
     
@@ -975,6 +1191,8 @@ class PerformanceMetrics {
             testSizes: this.testSizes,
             rawMetrics: this.metrics,
             statistics: this.calculateStatistics(),
+            opaquePercentiles: this.calculateOpaquePercentiles(),
+            percentileReport: this.generateOpaquePercentileReport(),
             csvData: this.generateCSV(),
             sizeCategorizedSummary: this.generateSizeCategorizedSummary()
         };
@@ -982,7 +1200,12 @@ class PerformanceMetrics {
     
     reset() {
         this.metrics = {
-            opaque: { registration: [], login: [], keyDerivation: [] },
+            opaque: { 
+                registration: [], 
+                login: [], 
+                loginSteps: { start: [], finish: [] },
+                keyDerivation: [] 
+            },
             encryption: { 
                 fileEncryption: [], 
                 fileDecryption: [], 
@@ -1008,6 +1231,8 @@ class PerformanceMetrics {
             system: { totalOperations: 0, errorCount: 0, errors: [] }
         };
         
+        this.currentLoginAttempt = null;
+        this.loginAttemptInProgress = false;
         this.startTime = Date.now();
         this.errorCount = 0;
         this.totalOps = 0;

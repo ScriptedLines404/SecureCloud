@@ -481,6 +481,74 @@ const PerformanceDashboard = ({ onClose }) => {
                 </div>
               )}
 
+{/* OPAQUE Percentile Report */}
+{stats.opaque && Object.keys(stats.opaque).length > 0 && (
+    <div className="border border-gray-200 rounded-lg p-4">
+        <h3 className="font-medium text-gray-800 mb-3 flex items-center">
+            <FaShieldAlt className="mr-2 text-purple-600" />
+            OPAQUE Authentication Percentiles (RFC 9380)
+        </h3>
+        <div className="text-sm text-gray-500 mb-3">
+            Each login attempt counted once. Total attempts: {stats.opaque.login?.count || 0}
+            {stats.opaque.login?.successful !== undefined && (
+                <span className="ml-2">
+                    (✅ {stats.opaque.login.successful} successful, ❌ {stats.opaque.login.failed || 0} failed)
+                </span>
+            )}
+        </div>
+        <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                    <tr>
+                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Operation</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">5th</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">25th</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">50th</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">75th</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">95th</th>
+                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Count</th>
+                    </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                    {Object.entries(stats.opaque).map(([key, value]) => {
+                        if (key === 'login' && value.p5 !== undefined) {
+                            return (
+                                <tr key={key} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3 text-sm font-medium text-gray-900 capitalize">
+                                        {key}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-right font-mono">
+                                        {formatDuration(value.p5)}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-right font-mono">
+                                        {formatDuration(value.p25)}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-right font-mono font-bold text-blue-600">
+                                        {formatDuration(value.p50)}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-right font-mono">
+                                        {formatDuration(value.p75)}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-right font-mono">
+                                        {formatDuration(value.p95)}
+                                    </td>
+                                    <td className="px-4 py-3 text-sm text-right text-gray-500">
+                                        {value.count}
+                                    </td>
+                                </tr>
+                            );
+                        }
+                        return null;
+                    })}
+                </tbody>
+            </table>
+        </div>
+        <div className="mt-3 text-xs text-gray-500 text-center">
+            Percentiles calculated from complete login attempts • 50th percentile is median
+        </div>
+    </div>
+)}
+
               {/* Research Summary */}
               <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
                 <h3 className="font-medium text-gray-800 mb-3">Research Summary</h3>

@@ -18,14 +18,16 @@
  * along with SecureCloud. If not, see <https://www.gnu.org/licenses/>.
  */
 
+// frontend/src/components/BatchDownloadModal.jsx - Fixed for actual file download
+
 import React, { useState, useEffect } from 'react';
-import { FaTimes, FaDownload, FaFile, FaSpinner, FaSearch, FaPause, FaPlay, FaStop } from 'react-icons/fa';
+import { FaTimes, FaDownload, FaFile, FaSpinner, FaSearch, FaPause, FaPlay, FaStop, FaCheckCircle, FaExclamationTriangle } from 'react-icons/fa';
 import { listUserFiles, downloadFromGoogleDrive } from '../services/googleDrive';
 import { getUserFiles } from '../services/metadataService';
 import { decryptFile } from '../utils/encryption';
 import { getMasterKeyFromMemory } from '../services/keyManagementService';
-import { downloadFilesAsZip } from '../utils/zipUtils';
 import toast from 'react-hot-toast';
+import JSZip from 'jszip';
 
 const BatchDownloadModal = ({ onClose }) => {
     const [files, setFiles] = useState([]);
@@ -41,7 +43,7 @@ const BatchDownloadModal = ({ onClose }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage] = useState(50);
     const [failedFiles, setFailedFiles] = useState([]);
-    const [retryCount, setRetryCount] = useState({});
+    const [completedFiles, setCompletedFiles] = useState([]);
     const userId = localStorage.getItem('userId');
 
     useEffect(() => {
@@ -152,12 +154,43 @@ const BatchDownloadModal = ({ onClose }) => {
                     throw error;
                 }
                 
-                // Wait before retry (exponential backoff)
                 const waitTime = Math.pow(2, attempt) * 1000;
                 console.log(`Waiting ${waitTime}ms before retry...`);
                 await sleep(waitTime);
             }
         }
+    };
+
+    const downloadFilesAsZip = async (filesToZip, zipName, onProgress) => {
+        const zip = new JSZip();
+        
+        for (let i = 0; i < filesToZip.length; i++) {
+            const file = filesToZip[i];
+            zip.file(file.name, file.blob);
+            
+            if (onProgress) {
+                onProgress(i + 1, filesToZip.length, file.name);
+            }
+        }
+        
+        // Generate the zip file
+        const zipBlob = await zip.generateAsync({ 
+            type: 'blob',
+            compression: 'DEFLATE',
+            compressionOptions: { level: 6 }
+        });
+        
+        // Trigger download
+        const url = URL.createObjectURL(zipBlob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = zipName;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        
+        return zipBlob;
     };
 
     const handleBatchDownload = async () => {
@@ -173,7 +206,6 @@ const BatchDownloadModal = ({ onClose }) => {
             const confirmed = window.confirm(
                 `You are about to download ${filesToDownload.length} files (${formatFileSize(totalSize)}).\n\n` +
                 `This may take 10-30 minutes depending on your connection.\n\n` +
-                `The download will continue in the background.\n\n` +
                 `Click OK to continue.`
             );
             if (!confirmed) return;
@@ -188,6 +220,7 @@ const BatchDownloadModal = ({ onClose }) => {
         setDownloading(true);
         setPaused(false);
         setFailedFiles([]);
+        setCompletedFiles([]);
         
         const downloadedFiles = [];
         let successCount = 0;
@@ -195,63 +228,54 @@ const BatchDownloadModal = ({ onClose }) => {
         let totalDownloadedSize = 0;
         const totalSize = filesToDownload.reduce((sum, f) => sum + (f.fileSize || f.size), 0);
 
-        // Process files in smaller batches to avoid memory issues
-        const BATCH_SIZE = 10;
-        const batches = [];
-        for (let i = 0; i < filesToDownload.length; i += BATCH_SIZE) {
-            batches.push(filesToDownload.slice(i, i + BATCH_SIZE));
-        }
-
-        for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        // Process files in smaller batches
+        const BATCH_SIZE = 5;
+        
+        for (let i = 0; i < filesToDownload.length; i++) {
             if (paused) {
                 toast('Download paused. Click resume to continue.', { icon: '⏸️', duration: 3000 });
                 break;
             }
-
-            const batch = batches[batchIndex];
             
-            for (let i = 0; i < batch.length; i++) {
-                if (paused) break;
-                
-                const file = batch[i];
-                const globalIndex = batchIndex * BATCH_SIZE + i + 1;
-                
-                setProgress({
-                    current: globalIndex,
-                    total: filesToDownload.length,
-                    currentFile: file.name,
-                    downloadedSize: formatFileSize(totalDownloadedSize),
-                    totalSize: formatFileSize(totalSize),
-                    percentage: Math.round((totalDownloadedSize / totalSize) * 100)
-                });
+            const file = filesToDownload[i];
+            const globalIndex = i + 1;
+            
+            setProgress({
+                current: globalIndex,
+                total: filesToDownload.length,
+                currentFile: file.name,
+                downloadedSize: formatFileSize(totalDownloadedSize),
+                totalSize: formatFileSize(totalSize),
+                percentage: totalSize > 0 ? Math.round((totalDownloadedSize / totalSize) * 100) : 0
+            });
 
-                try {
-                    console.log(`📥 Downloading ${globalIndex}/${filesToDownload.length}: ${file.name}`);
-                    
-                    const fileBlob = await downloadFileWithRetry(file, 3);
-                    
-                    totalDownloadedSize += fileBlob.size;
-                    downloadedFiles.push({
-                        name: file.name,
-                        blob: fileBlob
-                    });
-                    
-                    successCount++;
-                    
-                    toast.loading(
-                        `Progress: ${globalIndex}/${filesToDownload.length} - ${Math.round((totalDownloadedSize / totalSize) * 100)}%`,
-                        { id: 'batch-progress', duration: 1000 }
-                    );
-                    
-                    // Small delay between files to avoid rate limiting
-                    await sleep(500);
-                    
-                } catch (error) {
-                    console.error(`Failed to download ${file.name}:`, error);
-                    failCount++;
-                    setFailedFiles(prev => [...prev, { name: file.name, error: error.message }]);
-                    toast.error(`Failed: ${file.name} - ${error.message}`, { id: `error-${file.id}`, duration: 3000 });
-                }
+            try {
+                console.log(`📥 Downloading ${globalIndex}/${filesToDownload.length}: ${file.name}`);
+                
+                const fileBlob = await downloadFileWithRetry(file, 3);
+                
+                totalDownloadedSize += fileBlob.size;
+                downloadedFiles.push({
+                    name: file.name,
+                    blob: fileBlob
+                });
+                
+                successCount++;
+                setCompletedFiles(prev => [...prev, file.name]);
+                
+                toast.loading(
+                    `Progress: ${globalIndex}/${filesToDownload.length} - ${Math.round((totalDownloadedSize / totalSize) * 100)}%`,
+                    { id: 'batch-progress', duration: 1000 }
+                );
+                
+                // Small delay between files
+                await sleep(500);
+                
+            } catch (error) {
+                console.error(`Failed to download ${file.name}:`, error);
+                failCount++;
+                setFailedFiles(prev => [...prev, { name: file.name, error: error.message }]);
+                toast.error(`Failed: ${file.name} - ${error.message}`, { id: `error-${file.id}`, duration: 3000 });
             }
         }
 
@@ -263,7 +287,7 @@ const BatchDownloadModal = ({ onClose }) => {
                 const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
                 const zipName = `securecloud-backup-${timestamp} (${downloadedFiles.length} files).zip`;
                 
-                await downloadFilesAsZip(downloadedFiles, (completed, total, fileName) => {
+                await downloadFilesAsZip(downloadedFiles, zipName, (completed, total, fileName) => {
                     setProgress(prev => ({
                         ...prev,
                         currentFile: `Zipping: ${fileName}`,
@@ -271,9 +295,9 @@ const BatchDownloadModal = ({ onClose }) => {
                     }));
                 });
                 
-                let summaryMessage = `Downloaded ${successCount} files`;
+                let summaryMessage = `✅ Downloaded ${successCount} files`;
                 if (failCount > 0) {
-                    summaryMessage += `, ${failCount} failed`;
+                    summaryMessage += `, ❌ ${failCount} failed`;
                 }
                 
                 toast.success(
@@ -283,8 +307,9 @@ const BatchDownloadModal = ({ onClose }) => {
                             {summaryMessage} • {formatFileSize(totalDownloadedSize)}
                         </div>
                         {failedFiles.length > 0 && (
-                            <div className="text-xs mt-2 text-red-600">
-                                Failed: {failedFiles.map(f => f.name).join(', ')}
+                            <div className="text-xs mt-2 text-red-600 max-h-32 overflow-auto">
+                                Failed: {failedFiles.slice(0, 5).map(f => f.name).join(', ')}
+                                {failedFiles.length > 5 && ` +${failedFiles.length - 5} more`}
                             </div>
                         )}
                     </div>,
@@ -294,6 +319,8 @@ const BatchDownloadModal = ({ onClose }) => {
                 console.error('Failed to create ZIP:', zipError);
                 toast.error('Failed to create ZIP archive', { id: 'batch-progress' });
             }
+        } else if (downloadedFiles.length === 0 && !paused) {
+            toast.error('No files were successfully downloaded. Please check your connection and try again.', { duration: 5000 });
         }
 
         setDownloading(false);
@@ -307,7 +334,7 @@ const BatchDownloadModal = ({ onClose }) => {
             toast('Download paused', { icon: '⏸️' });
         } else {
             toast('Download resumed', { icon: '▶️' });
-            handleBatchDownload(); // Resume
+            handleBatchDownload();
         }
     };
 
@@ -437,7 +464,13 @@ const BatchDownloadModal = ({ onClose }) => {
                                 {currentFiles.map((file) => (
                                     <div
                                         key={file.id}
-                                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors"
+                                        className={`flex items-center justify-between p-3 rounded-lg transition-colors ${
+                                            completedFiles.includes(file.name) 
+                                                ? 'bg-green-50 border border-green-200' 
+                                                : failedFiles.some(f => f.name === file.name)
+                                                    ? 'bg-red-50 border border-red-200'
+                                                    : 'bg-gray-50 hover:bg-gray-100'
+                                        }`}
                                     >
                                         <div className="flex items-center space-x-3 flex-1 min-w-0">
                                             <input
@@ -447,7 +480,13 @@ const BatchDownloadModal = ({ onClose }) => {
                                                 className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 flex-shrink-0"
                                                 disabled={downloading}
                                             />
-                                            <FaFile className="text-gray-400 flex-shrink-0" />
+                                            {completedFiles.includes(file.name) ? (
+                                                <FaCheckCircle className="text-green-500 flex-shrink-0" />
+                                            ) : failedFiles.some(f => f.name === file.name) ? (
+                                                <FaExclamationTriangle className="text-red-500 flex-shrink-0" />
+                                            ) : (
+                                                <FaFile className="text-gray-400 flex-shrink-0" />
+                                            )}
                                             <div className="flex-1 min-w-0">
                                                 <p className="text-sm font-medium text-gray-800 truncate">
                                                     {file.name}
@@ -546,7 +585,7 @@ const BatchDownloadModal = ({ onClose }) => {
                 <div className="flex justify-between items-center p-6 border-t border-gray-200">
                     <div className="text-xs text-gray-500">
                         {!loading && files.length > 0 && !downloading && (
-                            <span>💾 Files are downloaded in batches of 10 to prevent memory issues</span>
+                            <span>💾 Files are downloaded in batches and saved as a ZIP archive</span>
                         )}
                     </div>
                     <div className="flex space-x-3">
