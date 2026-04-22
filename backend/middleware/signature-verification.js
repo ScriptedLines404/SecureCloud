@@ -1,4 +1,3 @@
-// backend/middleware/signature-verification.js
 const sessionStore = require('../services/session-store');
 const crypto = require('crypto');
 

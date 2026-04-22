@@ -1,5 +1,5 @@
 /**
- * SecureCloud - Zero-Knowledge Encrypted Flie Encryptor for Cloud Storage
+ * SecureCloud - Zero-Knowledge Cloud Storage System with OPAQUE Authentication, Hierarchical Key Isolation, Secure Sharing, and Formalised Tri-Layer Trust Boundaries
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  * 
  * This file is part of SecureCloud.
@@ -28,9 +28,6 @@ const keyMetadata = new Map();
 // Key wrapping salt
 const KEK_SALT = new TextEncoder().encode('SecureCloud-KEK-Salt-v2');
 const KEY_DERIVATION_INFO = new TextEncoder().encode('SecureCloud-MasterKey-v2');
-
-// Flag to track if we're in fallback mode
-let isFallbackMode = false;
 
 /**
  * Securely store master key in memory
@@ -69,6 +66,7 @@ export function getMasterKeyFromMemory(userId) {
     const metadata = keyMetadata.get(userId);
     if (!metadata) return null;
     
+    // Key expires after 1 hour of inactivity
     if (Date.now() - metadata.timestamp > 60 * 60 * 1000) {
         keyMetadata.delete(userId);
         return null;
@@ -106,6 +104,13 @@ async function deriveKEK(exportKey) {
             keyBytes = exportKey;
         } else if (exportKey instanceof ArrayBuffer) {
             keyBytes = new Uint8Array(exportKey);
+        } else if (typeof exportKey === 'string') {
+            // Assume base64
+            const binary = atob(exportKey);
+            keyBytes = new Uint8Array(binary.length);
+            for (let i = 0; i < binary.length; i++) {
+                keyBytes[i] = binary.charCodeAt(i);
+            }
         } else {
             throw new Error('Invalid export key format');
         }
@@ -440,6 +445,7 @@ export async function loadWrappedMasterKey(userId) {
         
         return { success: true, data: wrappedMek };
     } catch (error) {
+        console.error('Failed to load wrapped key:', error);
         return { success: false, error };
     }
 }
@@ -447,70 +453,18 @@ export async function loadWrappedMasterKey(userId) {
 /**
  * Initialize master key for new user
  */
-export async function initializeMasterKey(userId, exportKey, options = {}) {
+export async function initializeMasterKey(userId, exportKey) {
     const timerId = perfMetrics.startTimer('init-master-key');
     
     try {
-        const { isFallback = false } = options;
-        
-        // If this is a fallback login, we need to handle it differently
-        if (isFallback) {
-            console.log('🔄 Fallback mode: Generating new master key');
-            
-            // Generate a new master key
-            const masterKey = await generateMasterKey();
-            
-            // Store in memory (don't try to wrap with KEK since exportKey might be fallback)
-            storeMasterKey(masterKey, userId);
-            
-            // Try to save wrapped key, but don't fail if it doesn't work
-            try {
-                // For fallback, we'll use a simple wrapping with the export key
-                const iv = crypto.getRandomValues(new Uint8Array(12));
-                const rawMasterKey = await crypto.subtle.exportKey('raw', masterKey);
-                
-                // Import export key as AES key for wrapping
-                const kek = await crypto.subtle.importKey(
-                    'raw',
-                    exportKey,
-                    { name: 'AES-GCM' },
-                    false,
-                    ['wrapKey']
-                );
-                
-                const wrappedKey = await crypto.subtle.wrapKey(
-                    'raw',
-                    masterKey,
-                    kek,
-                    { name: 'AES-GCM', iv, tagLength: 128 }
-                );
-                
-                const result = new Uint8Array(iv.length + wrappedKey.byteLength);
-                result.set(iv, 0);
-                result.set(new Uint8Array(wrappedKey), iv.length);
-                
-                await saveWrappedMasterKey(userId, result);
-                console.log('✅ Fallback master key saved');
-            } catch (saveError) {
-                console.warn('⚠️ Could not save fallback master key:', saveError);
-                // Continue anyway - user can still use the app
-            }
-            
-            const duration = perfMetrics.endTimer(timerId, 'encryption', 'keyGeneration', { 
-                type: 'master-init-fallback',
-                userId
-            });
-            
-            console.log(`✅ Fallback master key created in ${duration?.toFixed(2)}ms for user:`, userId);
-            return masterKey;
-        }
-
-        // Normal OPAQUE flow
+        // Check if user already has a master key
         const existing = await loadWrappedMasterKey(userId);
         if (existing.success) {
+            console.log('User already has master key, loading existing...');
             return await loadMasterKey(userId, exportKey);
         }
-
+        
+        // Generate new master key
         const masterKey = await generateMasterKey();
         const wrappedMek = await wrapMasterKey(masterKey, exportKey);
         
@@ -539,40 +493,10 @@ export async function initializeMasterKey(userId, exportKey, options = {}) {
 /**
  * Load master key for existing user
  */
-export async function loadMasterKey(userId, exportKey, options = {}) {
+export async function loadMasterKey(userId, exportKey) {
     const timerId = perfMetrics.startTimer('load-master-key');
     
     try {
-        const { isFallback = false } = options;
-        
-        // For fallback mode, we need to handle differently
-        if (isFallback) {
-            console.log('🔄 Fallback mode: Loading master key from memory or generating new');
-            
-            // Check if we already have it in memory
-            const existingKey = getMasterKeyFromMemory(userId);
-            if (existingKey) {
-                return existingKey;
-            }
-            
-            // Try to load from database
-            const loadResult = await loadWrappedMasterKey(userId);
-            if (loadResult.success) {
-                try {
-                    // Try to unwrap with fallback export key
-                    const masterKey = await unwrapMasterKey(loadResult.data, exportKey);
-                    storeMasterKey(masterKey, userId);
-                    return masterKey;
-                } catch (unwrapError) {
-                    console.warn('⚠️ Could not unwrap existing key, generating new:', unwrapError);
-                }
-            }
-            
-            // Generate new master key
-            return await initializeMasterKey(userId, exportKey, { isFallback: true });
-        }
-
-        // Normal OPAQUE flow
         const loadResult = await loadWrappedMasterKey(userId);
         if (!loadResult.success) throw new Error(loadResult.error);
 
@@ -690,19 +614,4 @@ export function clearAllKeys(userId) {
     }
     
     console.log('✅ All keys cleared for user:', userId);
-}
-
-/**
- * Check if we're in fallback mode
- */
-export function isInFallbackMode() {
-    return isFallbackMode;
-}
-
-/**
- * Set fallback mode
- */
-export function setFallbackMode(value) {
-    isFallbackMode = value;
-    console.log(`🔄 Fallback mode: ${value ? 'ON' : 'OFF'}`);
 }

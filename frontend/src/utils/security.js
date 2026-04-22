@@ -1,5 +1,5 @@
 /**
- * SecureCloud - Zero-Knowledge Encrypted Flie Encryptor for Cloud Storage
+ * SecureCloud - Zero-Knowledge Cloud Storage System with OPAQUE Authentication, Hierarchical Key Isolation, Secure Sharing, and Formalised Tri-Layer Trust Boundaries
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  * 
  * This file is part of SecureCloud.

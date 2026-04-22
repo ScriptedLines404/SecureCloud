@@ -1,5 +1,5 @@
 /**
- * SecureCloud - Zero-Knowledge Encrypted Flie Encryptor for Cloud Storage
+ * SecureCloud - Zero-Knowledge Cloud Storage System with OPAQUE Authentication, Hierarchical Key Isolation, Secure Sharing, and Formalised Tri-Layer Trust Boundaries
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  * 
  * This file is part of SecureCloud.
@@ -22,7 +22,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { FaEnvelope, FaLock, FaShieldAlt } from 'react-icons/fa';
 import { login } from '../utils/opaque';
-import { initializeMasterKey, loadMasterKey, clearMasterKeyFromMemory, setFallbackMode } from '../services/keyManagementService';
+import { initializeMasterKey, loadMasterKey, clearMasterKeyFromMemory } from '../services/keyManagementService';
 import toast from 'react-hot-toast';
 import { isValidEmail } from '../utils/security';
 import { useSecureStorage } from '../hooks/useSecureStorage';
@@ -33,10 +33,9 @@ const LoginOpaque = () => {
     const [formData, setFormData] = useState({ email: '', password: '' });
     const [loading, setLoading] = useState(false);
     const [attempts, setAttempts] = useSecureStorage('login_attempts', 0, { persistent: true, ttl: 60 });
-    const [loginStarted, setLoginStarted] = useState(false); // Track if login has started
+    const [loginStarted, setLoginStarted] = useState(false);
 
     useEffect(() => {
-        // Clear any stale master key on component mount
         const userId = localStorage.getItem('userId');
         if (userId) {
             clearMasterKeyFromMemory(userId);
@@ -45,7 +44,6 @@ const LoginOpaque = () => {
         const token = localStorage.getItem('sessionToken');
         if (token) navigate('/dashboard', { replace: true });
         
-        // Reset login tracking on unmount
         return () => {
             if (loginStarted) {
                 perfMetrics.cancelLoginAttempt();
@@ -60,7 +58,6 @@ const LoginOpaque = () => {
     const handleSubmit = async (e) => {
         e.preventDefault();
         
-        // Prevent multiple submissions
         if (loading || loginStarted) {
             console.log('Login already in progress, ignoring duplicate click');
             return;
@@ -76,12 +73,11 @@ const LoginOpaque = () => {
             return;
         }
 
-        if (attempts >= 95) {
+        if (attempts >= 5) {
             toast.error('Too many attempts. Please try again later.');
             return;
         }
 
-        // Start tracking this login attempt (only once)
         const trackingStarted = perfMetrics.startLoginAttempt(formData.email);
         if (!trackingStarted) {
             console.log('Login tracking already in progress');
@@ -91,76 +87,53 @@ const LoginOpaque = () => {
         setLoginStarted(true);
         setLoading(true);
         
-        // Track step timing
         const stepStartTime = performance.now();
         
         try {
             console.log('Step 1: OPAQUE authentication...');
             const result = await login(formData.email, formData.password);
             
-            // Track OPAQUE step completion
             perfMetrics.trackLoginStep('opaque_authentication', performance.now() - stepStartTime);
             
             console.log('Step 2: OPAQUE success, export key length:', result.exportKey?.length);
             console.log('Step 2 details:', { 
                 userId: result.userId, 
-                hasSessionToken: !!result.sessionToken,
-                isFallback: result.fallback 
+                hasSessionToken: !!result.sessionToken
             });
             
-            // Track key step
             const keyStepStart = performance.now();
             
-            // Set fallback mode if this was a fallback login
-            if (result.fallback) {
-                setFallbackMode(true);
-                console.log('🔄 Setting fallback mode ON');
-            } else {
-                setFallbackMode(false);
-            }
-            
-            // Clear any existing master key for this user
             clearMasterKeyFromMemory(result.userId);
             
-            // Step 3: Handle master key
             let masterKey;
             try {
-                masterKey = await loadMasterKey(result.userId, result.exportKey, { 
-                    isFallback: result.fallback 
-                });
+                masterKey = await loadMasterKey(result.userId, result.exportKey);
                 console.log('Step 3: Existing master key loaded');
                 toast.success('Master key loaded');
             } catch (loadError) {
                 console.log('No existing key, creating new:', loadError.message);
-                masterKey = await initializeMasterKey(result.userId, result.exportKey, { 
-                    isFallback: result.fallback 
-                });
+                masterKey = await initializeMasterKey(result.userId, result.exportKey);
                 console.log('Step 3: New master key created and saved');
-                toast.success(result.fallback ? 'Fallback master key created' : 'Master key created');
+                toast.success('Master key created');
             }
 
             if (!masterKey) throw new Error('Failed to establish master key');
             
-            // Track key derivation completion
             perfMetrics.trackLoginStep('master_key_derivation', performance.now() - keyStepStart);
 
-            // Reset attempts on success
             setAttempts(0);
             setFormData({ email: '', password: '' });
             
-            // Mark login as successful (only once)
             perfMetrics.finishLoginAttempt(true);
             setLoginStarted(false);
             
-            toast.success(result.fallback ? 'Login successful! ' : 'Login successful');
+            toast.success('Login successful!');
             
-            // Small delay before redirect
             setTimeout(() => navigate('/dashboard', { replace: true }), 100);
 
         } catch (err) {
             console.error('Login error:', err);
             
-            // Mark login as failed (only once)
             perfMetrics.finishLoginAttempt(false, err.message);
             setLoginStarted(false);
             
@@ -202,7 +175,7 @@ const LoginOpaque = () => {
                                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="you@example.com"
                                 required
-                                disabled={loading || attempts >= 95}
+                                disabled={loading || attempts >= 5}
                                 autoComplete="email"
                             />
                         </div>
@@ -222,7 +195,7 @@ const LoginOpaque = () => {
                                 className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                                 placeholder="••••••••"
                                 required
-                                disabled={loading || attempts >= 95}
+                                disabled={loading || attempts >= 5}
                                 autoComplete="current-password"
                             />
                         </div>
@@ -237,7 +210,7 @@ const LoginOpaque = () => {
                     <button
                         type="submit"
                         className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors font-medium"
-                        disabled={loading || attempts >= 95}
+                        disabled={loading || attempts >= 5}
                     >
                         {loading ? (
                             <span className="flex items-center justify-center">

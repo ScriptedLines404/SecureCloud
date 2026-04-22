@@ -1,14 +1,5 @@
-// backend/middleware/security.js
 const rateLimit = require('express-rate-limit');
 
-/**
- * Phase 8: Backend Hardening - Strict Security Middleware
- * All validation re-enabled at strict levels
- */
-
-/**
- * PHASE 9: Advanced rate limiting with exponential backoff
- */
 class RateLimiter {
     constructor() {
         this.ipAttempts = new Map();
@@ -506,7 +497,7 @@ const validateSessionToken = (req, res, next) => {
 };
 
 /**
- * PHASE 8: Strict TLS enforcement middleware
+ * Strict TLS enforcement middleware
  */
 const enforceTLS = (req, res, next) => {
     // Skip in development mode for local testing
@@ -544,7 +535,7 @@ const enforceTLS = (req, res, next) => {
 };
 
 /**
- * PHASE 8: Validate request origin
+ * Validate request origin
  */
 const validateOrigin = (req, res, next) => {
     const origin = req.get('origin');

@@ -1,5 +1,5 @@
 /**
- * SecureCloud - Zero-Knowledge Encrypted Flie Encryptor for Cloud Storage
+ * SecureCloud - Zero-Knowledge Cloud Storage System with OPAQUE Authentication, Hierarchical Key Isolation, Secure Sharing, and Formalised Tri-Layer Trust Boundaries
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  * 
  * This file is part of SecureCloud.
@@ -21,7 +21,7 @@
 const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
-const opaqueServer = require('../services/opaque-server-webcrypto'); // Changed to webcrypto version
+const opaqueServer = require('../services/opaque-server-webcrypto');
 const crypto = require('crypto');
 
 const supabase = createClient(
@@ -307,225 +307,7 @@ router.post('/login/finish', async (req, res) => {
     }
 });
 
-// FALLBACK AUTHENTICATION ENDPOINTS
-router.post('/check-user', async (req, res) => {
-    try {
-        const { email } = req.body;
-        
-        if (!email) {
-            return res.status(400).json({ error: 'Email required' });
-        }
-
-        console.log('📝 /check-user - Email:', email);
-
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', email.toLowerCase())
-            .maybeSingle();
-
-        if (error) {
-            console.error('Check user error:', error);
-            return res.status(500).json({ error: 'Database error' });
-        }
-
-        if (user) {
-            console.log('✅ User found:', user.id);
-            res.json({ success: true, userId: user.id });
-        } else {
-            console.log('❌ User not found');
-            res.json({ success: true, userId: null });
-        }
-    } catch (error) {
-        console.error('Check user error:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-router.post('/create-user', async (req, res) => {
-    try {
-        const { email } = req.body;
-        
-        if (!email) {
-            return res.status(400).json({ error: 'Email required' });
-        }
-
-        console.log('📝 /create-user - Email:', email);
-
-        const { data: existing, error: checkError } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', email.toLowerCase())
-            .maybeSingle();
-
-        if (checkError) {
-            console.error('Check existing user error:', checkError);
-            return res.status(500).json({ error: 'Database error' });
-        }
-
-        if (existing) {
-            console.log('✅ User already exists:', existing.id);
-            return res.json({ success: true, userId: existing.id, isNew: false });
-        }
-
-        const { data: user, error: insertError } = await supabase
-            .from('users')
-            .insert({
-                email: email.toLowerCase(),
-                registration_record: 'fallback-mode-' + Date.now(),
-                failed_attempts: 0
-            })
-            .select('id')
-            .single();
-
-        if (insertError) {
-            console.error('Create user error:', insertError);
-            return res.status(500).json({ error: 'Failed to create user' });
-        }
-
-        console.log('✅ New user created:', user.id);
-
-        await supabase
-            .from('user_keys')
-            .insert({
-                user_id: user.id,
-                wrapped_mek: ''
-            });
-
-        res.json({ 
-            success: true, 
-            userId: user.id, 
-            isNew: true 
-        });
-
-    } catch (error) {
-        console.error('Create user error:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-router.post('/fallback-login', async (req, res) => {
-    try {
-        const { email } = req.body;
-        
-        if (!email) {
-            return res.status(400).json({ error: 'Email required' });
-        }
-
-        console.log('📝 /fallback-login - Email:', email);
-
-        let { data: user, error: fetchError } = await supabase
-            .from('users')
-            .select('id')
-            .eq('email', email.toLowerCase())
-            .maybeSingle();
-
-        if (fetchError) {
-            console.error('Fetch user error:', fetchError);
-            return res.status(500).json({ error: 'Database error' });
-        }
-
-        let isFirstLogin = false;
-
-        if (!user) {
-            const { data: newUser, error: createError } = await supabase
-                .from('users')
-                .insert({
-                    email: email.toLowerCase(),
-                    registration_record: 'fallback-mode-' + Date.now(),
-                    failed_attempts: 0
-                })
-                .select('id')
-                .single();
-
-            if (createError) {
-                console.error('Create user error:', createError);
-                return res.status(500).json({ error: 'Failed to create user' });
-            }
-
-            user = newUser;
-            isFirstLogin = true;
-
-            await supabase
-                .from('user_keys')
-                .insert({
-                    user_id: user.id,
-                    wrapped_mek: ''
-                });
-        }
-
-        const sessionToken = crypto
-            .createHmac('sha256', process.env.OPAQUE_SERVER_PRIVATE_KEY || 'fallback-secret')
-            .update(`${email}:${user.id}:${Date.now()}`)
-            .digest('base64')
-            .replace(/=/g, '')
-            .replace(/\+/g, '-')
-            .replace(/\//g, '_');
-
-        const exportKey = crypto.randomBytes(32);
-
-        sessionStore.createSession(user.id, sessionToken, exportKey);
-
-        await supabase
-            .from('users')
-            .update({
-                last_login: new Date().toISOString(),
-                failed_attempts: 0
-            })
-            .eq('id', user.id);
-
-        res.json({
-            success: true,
-            userId: user.id,
-            sessionToken: sessionToken,
-            isFirstLogin: isFirstLogin,
-            fallback: true
-        });
-
-    } catch (error) {
-        console.error('Fallback login error:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
-router.get('/user-status/:email', async (req, res) => {
-    try {
-        const { email } = req.params;
-        
-        const { data: user, error } = await supabase
-            .from('users')
-            .select('id, email, failed_attempts, locked_until, last_login, created_at')
-            .eq('email', email.toLowerCase())
-            .maybeSingle();
-
-        if (error) {
-            return res.status(500).json({ error: 'Database error' });
-        }
-
-        if (!user) {
-            return res.json({ exists: false });
-        }
-
-        const { data: keyData } = await supabase
-            .from('user_keys')
-            .select('wrapped_mek')
-            .eq('user_id', user.id)
-            .maybeSingle();
-
-        res.json({
-            exists: true,
-            user: {
-                ...user,
-                hasWrappedKey: !!(keyData && keyData.wrapped_mek)
-            }
-        });
-
-    } catch (error) {
-        console.error('User status error:', error);
-        res.status(500).json({ error: 'Server error' });
-    }
-});
-
+// Logout
 router.post('/logout', async (req, res) => {
     try {
         const sessionToken = req.headers.authorization?.replace('Bearer ', '');
@@ -539,6 +321,7 @@ router.post('/logout', async (req, res) => {
     }
 });
 
+// Session stats
 router.get('/session-stats', async (req, res) => {
     try {
         const activeSessions = [];

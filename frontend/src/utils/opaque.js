@@ -1,6 +1,5 @@
-// frontend/src/utils/opaque.js
 /**
- * SecureCloud - Zero-Knowledge Encrypted File Encryptor for Cloud Storage
+ * SecureCloud - Zero-Knowledge Cloud Storage System with OPAQUE Authentication, Hierarchical Key Isolation, Secure Sharing, and Formalised Tri-Layer Trust Boundaries
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  * 
  * This file is part of SecureCloud.
@@ -52,12 +51,9 @@ function base64UrlDecode(str) {
 }
 
 /**
- * API call with performance tracking (tracking moved to component)
+ * API call
  */
 export async function apiCall(endpoint, data) {
-    const startTime = performance.now();
-    const payloadSize = JSON.stringify(data).length;
-    
     console.log(`📤 API Request to ${endpoint}:`, JSON.stringify(data, null, 2).substring(0, 200));
     
     try {
@@ -68,9 +64,8 @@ export async function apiCall(endpoint, data) {
         });
         
         const result = await response.json();
-        const duration = performance.now() - startTime;
         
-        console.log(`📥 API Response from ${endpoint} (${duration.toFixed(2)}ms):`, result);
+        console.log(`📥 API Response from ${endpoint}:`, result);
         
         if (!response.ok) {
             throw new Error(result.error || 'Request failed');
@@ -78,8 +73,7 @@ export async function apiCall(endpoint, data) {
         
         return result;
     } catch (error) {
-        const duration = performance.now() - startTime;
-        console.error(`❌ API call to ${endpoint} failed after ${duration.toFixed(2)}ms:`, error.message);
+        console.error(`❌ API call to ${endpoint} failed:`, error.message);
         throw error;
     }
 }
@@ -99,7 +93,7 @@ class OPRF {
         // Hash the password
         const passwordHash = await sha256(new TextEncoder().encode(password));
         
-        // Blind the hash (XOR-based blinding for simplicity)
+        // Blind the hash (XOR-based blinding)
         const blinded = new Uint8Array(passwordHash.length);
         for (let i = 0; i < passwordHash.length; i++) {
             blinded[i] = passwordHash[i] ^ r[i % r.length];
@@ -160,7 +154,6 @@ export async function register(email, password) {
         });
         
         // Step 3: Finish registration
-        // Decode server response
         const evaluated = base64UrlDecode(serverStart.registrationResponse);
         
         // Finalize OPRF
@@ -212,7 +205,7 @@ export async function register(email, password) {
 }
 
 /**
- * Login flow - No performance tracking here, tracking is done in component
+ * Login flow
  */
 export async function login(email, password) {
     console.log('\n========== LOGIN ==========');
@@ -241,7 +234,6 @@ export async function login(email, password) {
         });
         
         // Step 3: Finish login
-        // Decode server response
         const evaluated = base64UrlDecode(serverStart.authenticationResponse);
         
         // Finalize OPRF
@@ -303,95 +295,11 @@ export async function login(email, password) {
             userId: serverFinish.userId,
             sessionToken: serverFinish.sessionToken,
             exportKey: _exportKey,
-            isFirstLogin: serverFinish.isFirstLogin,
-            fallback: serverFinish.fallback || false
+            isFirstLogin: serverFinish.isFirstLogin
         };
         
     } catch (error) {
         console.error(`❌ Login failed:`, error);
-        throw error;
-    }
-}
-
-/**
- * Fallback login - For when OPAQUE fails
- */
-export async function fallbackLogin(email, password) {
-    console.log('\n========== FALLBACK LOGIN ==========');
-    console.log('Email:', email);
-    
-    try {
-        // Step 1: Check if user exists
-        const userCheck = await apiCall('/auth/check-user', {
-            email: email.toLowerCase()
-        }).catch(() => null);
-        
-        let userId;
-        let isFirstLogin = false;
-        
-        if (userCheck && userCheck.userId) {
-            userId = userCheck.userId;
-            console.log('✅ Found existing user with ID:', userId);
-        } else {
-            console.log('🔄 User not found, creating new user...');
-            
-            const newUser = await apiCall('/auth/create-user', {
-                email: email.toLowerCase()
-            }).catch(() => null);
-            
-            if (newUser && newUser.userId) {
-                userId = newUser.userId;
-                isFirstLogin = true;
-                console.log('✅ Created new user with ID:', userId);
-            } else {
-                throw new Error('Failed to create user account');
-            }
-        }
-        
-        // Step 2: Complete fallback login
-        const result = await apiCall('/auth/fallback-login', {
-            email: email.toLowerCase()
-        });
-        
-        if (!result.success || !result.userId || !result.sessionToken) {
-            throw new Error('Invalid server response');
-        }
-        
-        // Store session data
-        localStorage.setItem('sessionToken', result.sessionToken);
-        localStorage.setItem('userId', result.userId);
-        localStorage.setItem('userEmail', email.toLowerCase());
-        
-        // Generate fallback export key from password
-        const encoder = new TextEncoder();
-        const passwordData = encoder.encode(password);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', passwordData);
-        const fallbackExportKey = new Uint8Array(hashBuffer);
-        _exportKey = fallbackExportKey;
-        
-        // Store in session storage
-        try {
-            sessionStorage.setItem(EXPORT_KEY_STORAGE, JSON.stringify({
-                data: Array.from(_exportKey),
-                userId: result.userId
-            }));
-        } catch (e) {
-            console.warn('Could not store export key in sessionStorage');
-        }
-        
-        console.log(`✅ Fallback login successful`);
-        
-        return {
-            success: true,
-            userId: result.userId,
-            sessionToken: result.sessionToken,
-            exportKey: fallbackExportKey,
-            isFirstLogin: isFirstLogin,
-            fallback: true
-        };
-        
-    } catch (error) {
-        console.error(`❌ Fallback login failed:`, error);
         throw error;
     }
 }
@@ -424,7 +332,7 @@ export function getExportKey() {
 }
 
 /**
- * Logout - Clear all session data
+ * Logout
  */
 export function logout() {
     _exportKey = null;
@@ -443,16 +351,4 @@ export function isLoggedIn() {
     const sessionToken = localStorage.getItem('sessionToken');
     const userId = localStorage.getItem('userId');
     return !!(sessionToken && userId);
-}
-
-/**
- * Get current session info
- */
-export function getSessionInfo() {
-    return {
-        userId: localStorage.getItem('userId'),
-        email: localStorage.getItem('userEmail'),
-        hasSessionToken: !!localStorage.getItem('sessionToken'),
-        hasExportKey: !!_exportKey
-    };
 }
