@@ -3,7 +3,7 @@ message: "If you use this software, please cite it as below."
 author: Vladimir Illich Arunan V V
 title:ScriptedLines404/SecureCloud: SecureCloud_v101 - Zero-Knowledge File Encryptor for Cloud Storage with OPAQUE Protocol For Authentication (RFC 9380)
 version: SecureCloud_v101
-date-released: 2026-04-12
+date-released: 2026-04-
 doi: "10.5281/zenodo.19467810"
 repository-code: "https://github.com/ScriptedLines404/SecureCloud"
 license: "GPL-3.0"
