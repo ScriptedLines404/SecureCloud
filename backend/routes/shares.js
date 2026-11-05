@@ -274,7 +274,11 @@ router.post('/request-code', async (req, res) => {
         );
 
         if (!emailResult.success) {
-            return res.status(500).json({ error: 'Failed to send verification email' });
+            return res.status(503).json({
+                error: 'Email service unconfigured or unavailable. Please check server SMTP settings.',
+                code: 'EMAIL_SERVICE_UNAVAILABLE',
+                details: emailResult.error
+            });
         }
 
         res.json({

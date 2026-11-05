@@ -61,9 +61,20 @@ const FileUpload = ({ onUploadComplete }) => {
     }, []);
 
     const onDrop = useCallback((acceptedFiles) => {
+        const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB limit to prevent browser OOM
+        const validFiles = [];
+
+        for (const file of acceptedFiles) {
+            if (file.size > MAX_FILE_SIZE) {
+                toast.error(`File "${file.name}" exceeds the 100MB browser limit.`);
+                continue;
+            }
+            validFiles.push(file);
+        }
+
         setFiles(prev => [
             ...prev,
-            ...acceptedFiles.map(file => ({
+            ...validFiles.map(file => ({
                 file,
                 id: generateFileId(),
                 status: 'pending',

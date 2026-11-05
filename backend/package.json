@@ -11,6 +11,8 @@
     "generate-key": "node scripts/generate-server-key.js"
   },
   "dependencies": {
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "@supabase/supabase-js": "^2.4.0",
     "cors": "^2.8.5",
     "dotenv": "^16.0.3",

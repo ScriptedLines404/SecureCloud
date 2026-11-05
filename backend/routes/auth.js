@@ -218,10 +218,12 @@ router.post('/login/start', async (req, res) => {
             user.registration_record
         );
 
-        res.json({ 
+        res.json({
             success: true,
             sessionId: result.sessionId,
-            authenticationResponse: result.authenticationResponse
+            authenticationResponse: result.authenticationResponse,
+            serverNonce: result.serverNonce,
+            registrationRecord: user.registration_record
         });
 
     } catch (error) {
