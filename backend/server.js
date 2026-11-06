@@ -87,11 +87,6 @@ async function startServer() {
     app.use(auditLog);
     app.use(validateInput);
 
-    // Handle OPTIONS preflight requests
-    app.options('*', (req, res) => {
-        res.sendStatus(200);
-    });
-
     // Health check endpoint
     app.get('/health', (req, res) => {
         res.json({

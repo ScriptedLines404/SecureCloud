@@ -182,7 +182,8 @@ export function createFileMetadata(file, fileId, userId) {
     };
 }
 
-// Re-export utilities
+// Note: All crypto utilities are now imported from encryption-webcrypto.js directly
+// This file maintains compatibility with existing code using named imports
 export {
     generateEncryptionKey,
     exportKeyToRaw,

@@ -39,7 +39,9 @@ class SessionStore {
             exportKeyBuffer = Buffer.from(exportKey);
         } else if (typeof exportKey === 'string') {
             try {
-                exportKeyBuffer = Buffer.from(exportKey, 'base64');
+                let base64 = exportKey.replace(/-/g, '+').replace(/_/g, '/');
+                while (base64.length % 4) base64 += '=';
+                exportKeyBuffer = Buffer.from(base64, 'base64');
             } catch (e) {
                 exportKeyBuffer = Buffer.from(exportKey);
             }

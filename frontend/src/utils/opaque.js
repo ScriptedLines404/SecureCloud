@@ -4,7 +4,7 @@
  * Copyright (C) 2026 Vladimir Illich Arunan V V
  */
 
-import { OPRFClient, stretchPassword, deriveOpaqueKeys, createEnvelope, openEnvelope, base64UrlEncode, base64UrlDecode } from './opaque-crypto';
+import { base64UrlEncode, base64UrlDecode, hmacSha256 } from './encryption-webcrypto';
 
 const EXPORT_KEY_STORAGE = 'opaque_export_key';
 let _exportKey = null;
@@ -35,12 +35,11 @@ async function signRequest(method, path, body) {
     // Sort keys for canonicalization
     const dataToSignString = JSON.stringify(dataToSign, Object.keys(dataToSign).sort());
 
-    // Compute HMAC
-    const cryptoKey = await crypto.subtle.importKey('raw', _exportKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const sig = await crypto.subtle.sign('HMAC', cryptoKey, new TextEncoder().encode(dataToSignString));
+    // Compute HMAC using Web Crypto API
+    const sig = await hmacSha256(_exportKey, new TextEncoder().encode(dataToSignString));
 
     return {
-        signature: btoa(String.fromCharCode(...new Uint8Array(sig))),
+        signature: base64UrlEncode(sig),
         timestamp: timestamp
     };
 }
@@ -150,9 +149,8 @@ export async function login(email, password) {
 
 async function computeAuthProof(authKey, serverNonce) {
     // HMAC(AuthKey, ServerNonce + "SecureCloud-Auth-Proof")
-    const authKeyImported = await crypto.subtle.importKey('raw', authKey, { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-    const proof = await crypto.subtle.sign('HMAC', authKeyImported, new TextEncoder().encode(serverNonce + 'SecureCloud-Auth-Proof'));
-    return new Uint8Array(proof);
+    const proof = await hmacSha256(authKey, new TextEncoder().encode(serverNonce + 'SecureCloud-Auth-Proof'));
+    return proof;
 }
 
 export function getExportKey() { return _exportKey; }

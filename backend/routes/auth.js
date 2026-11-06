@@ -22,6 +22,7 @@ const express = require('express');
 const router = express.Router();
 const { createClient } = require('@supabase/supabase-js');
 const opaqueServer = require('../services/opaque-server-webcrypto');
+const sessionStore = require('../services/session-store');
 const crypto = require('crypto');
 
 const supabase = createClient(
@@ -29,44 +30,20 @@ const supabase = createClient(
     process.env.SUPABASE_SERVICE_ROLE_KEY
 );
 
-// Session store
-const sessionStore = {
-    sessions: new Map(),
-    
-    getSession(token) {
-        return this.sessions.get(token);
-    },
-    
-    setSession(token, sessionData) {
-        this.sessions.set(token, sessionData);
-    },
-    
-    deleteSession(token) {
-        this.sessions.delete(token);
-    },
-    
-    createSession(userId, sessionToken, exportKey) {
-        this.sessions.set(sessionToken, {
-            userId,
-            exportKey,
-            createdAt: Date.now(),
-            expiresAt: Date.now() + 24 * 60 * 60 * 1000
+// Session stats
+router.get('/session-stats', async (req, res) => {
+    try {
+        const stats = sessionStore.getStats ? sessionStore.getStats() : [];
+        res.json({
+            totalSessions: stats.length,
+            activeSessions: stats.length,
+            sessions: stats.slice(0, 10)
         });
-    },
-    
-    cleanup() {
-        const now = Date.now();
-        for (const [token, session] of this.sessions.entries()) {
-            if (session.expiresAt < now) {
-                this.sessions.delete(token);
-            }
-        }
+    } catch (error) {
+        console.error('Session stats error:', error);
+        res.status(500).json({ error: 'Server error' });
     }
-};
-
-setInterval(() => {
-    sessionStore.cleanup();
-}, 15 * 60 * 1000);
+});
 
 // Registration: Step 1
 router.post('/register/start', async (req, res) => {

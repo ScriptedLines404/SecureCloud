@@ -37,12 +37,18 @@ class OpaqueServerService {
      * Evaluates blinded request with server private key using HMAC-SHA256 HKDF extract/expand
      * Guarantees zero-knowledge: Server cannot learn client password or unblinded output.
      */
+    parseBase64(str) {
+        if (!str || typeof str !== 'string') return Buffer.alloc(0);
+        let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+        while (base64.length % 4) base64 += '=';
+        return Buffer.from(base64, 'base64');
+    }
+
     async oprfEvaluate(blindedBuffer) {
         if (!this.serverPrivateKey) {
             throw new Error('Server key not initialized');
         }
 
-        // Compute evaluated element = HKDF(IKM=blindedBuffer, SALT=serverPrivateKey, INFO="OPAQUE-OPRF-Eval")
         const prk = hmac(sha256, this.serverPrivateKey, blindedBuffer);
         const info = Buffer.from('OPAQUE-OPRF-Evaluation-v1');
         const evaluated = hkdf(sha256, prk, Buffer.alloc(32), info, 32);
@@ -54,7 +60,7 @@ class OpaqueServerService {
         try {
             console.log('🔒 Registration start - user:', userIdentifier);
 
-            const blinded = Buffer.from(registrationRequestBase64, 'base64');
+            const blinded = this.parseBase64(registrationRequestBase64);
             if (blinded.length < 16) {
                 throw new Error('INVALID_REGISTRATION_REQUEST_LENGTH');
             }
@@ -101,7 +107,7 @@ class OpaqueServerService {
         try {
             console.log('🔒 Login start - user:', userIdentifier);
 
-            const blinded = Buffer.from(startLoginRequestBase64, 'base64');
+            const blinded = this.parseBase64(startLoginRequestBase64);
             if (blinded.length < 16) {
                 throw new Error('INVALID_AUTHENTICATION_REQUEST_LENGTH');
             }
@@ -146,7 +152,7 @@ class OpaqueServerService {
         try {
             console.log('🔒 Login finish - user:', session.userIdentifier);
 
-            const finishRequest = Buffer.from(finishLoginRequestBase64, 'base64');
+            const finishRequest = this.parseBase64(finishLoginRequestBase64);
             if (finishRequest.length < 16) {
                 throw new Error('INVALID_PROOF_LENGTH');
             }
